@@ -1,0 +1,397 @@
+/* ===================================
+   LinguaSync Modern Settings Styles
+   =================================== */
+
+/* === Header === */
+.ls-header {
+    text-align: center;
+    padding: 24px 20px 20px;
+    background: var(--background-primary);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ls-title {
+    color: #20C9A6;
+    font-size: 2em;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.3px;
+}
+
+.ls-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* === Tab Navigation === */
+.ls-tab-nav {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 16px 20px 0;
+    border-bottom: 2px solid var(--background-modifier-border);
+    background: var(--background-primary);
+}
+
+.ls-tab {
+    padding: 10px 20px 14px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-width: 100px;
+    border-radius: 4px 4px 0 0;
+}
+
+.ls-tab:hover {
+    background: var(--background-modifier-hover);
+}
+
+.ls-tab.is-active {
+    border-bottom-color: #20C9A6;
+    background: var(--background-primary-alt);
+}
+
+.ls-tab-label {
+    font-weight: 500;
+    font-size: 0.9em;
+    color: var(--text-normal);
+    margin-bottom: 2px;
+    display: block;
+}
+
+.ls-tab.is-active .ls-tab-label {
+    color: #20C9A6;
+    font-weight: 600;
+}
+
+.ls-tab-sublabel {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    display: block;
+}
+
+/* === Tab Content === */
+.ls-tab-content {
+    padding: 24px 32px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* === Section Cards === */
+.ls-section {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-left: 4px solid #20C9A6;
+    border-radius: 6px;
+    padding: 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ls-section:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.ls-section-title {
+    font-size: 1.05em;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: var(--text-normal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ls-section-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 16px;
+    background: #20C9A6;
+    border-radius: 2px;
+}
+
+.ls-section-subtitle {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin: 0 0 14px 0;
+    line-height: 1.4;
+}
+
+/* === Setting Items within Sections === */
+.ls-section .setting-item {
+    border-top: 1px solid var(--background-modifier-border-hover);
+    padding: 12px 0;
+}
+
+.ls-section .setting-item:first-of-type {
+    border-top: none;
+    padding-top: 0;
+}
+
+.ls-section .setting-item:last-of-type {
+    padding-bottom: 0;
+}
+
+.ls-section .setting-item-name {
+    font-weight: 500;
+}
+
+/* === Info Boxes === */
+.ls-info-box {
+    background: rgba(32, 201, 166, 0.05);
+    border-left: 3px solid #20C9A6;
+    padding: 12px 14px;
+    border-radius: 4px;
+    margin: 14px 0;
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+.ls-info-box.warning {
+    background: rgba(255, 193, 7, 0.05);
+    border-left-color: #FFC107;
+}
+
+.ls-info-box.error {
+    background: rgba(244, 67, 54, 0.05);
+    border-left-color: #F44336;
+}
+
+.ls-info-box strong {
+    color: #20C9A6;
+}
+
+/* === Code Styling === */
+.ls-code {
+    background: var(--background-secondary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    font-size: 0.88em;
+    color: #20C9A6;
+    border: 1px solid var(--background-modifier-border);
+}
+
+/* === Buttons === */
+.ls-button {
+    background: #20C9A6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+}
+
+.ls-button:hover {
+    background: #1ab896;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(32, 201, 166, 0.3);
+}
+
+.ls-button:active {
+    transform: translateY(0);
+}
+
+.ls-button.secondary {
+    background: var(--interactive-normal);
+    color: var(--text-normal);
+}
+
+.ls-button.secondary:hover {
+    background: var(--interactive-hover);
+}
+
+.ls-button.danger {
+    background: var(--interactive-accent);
+}
+
+.ls-button.danger:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* === Form Elements === */
+.ls-section input[type="text"],
+.ls-section textarea,
+.ls-section input[type="password"] {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 5px;
+    padding: 7px 10px;
+    transition: all 0.2s ease;
+    background: var(--background-primary);
+}
+
+.ls-section input[type="text"]:focus,
+.ls-section textarea:focus,
+.ls-section input[type="password"]:focus {
+    border-color: #20C9A6;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(32, 201, 166, 0.1);
+}
+
+.ls-section select.dropdown {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 5px;
+    padding: 6px 10px;
+    background: var(--background-primary);
+}
+
+/* === Toggle Improvements === */
+.ls-section .checkbox-container {
+    border: 2px solid var(--background-modifier-border);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.ls-section .checkbox-container.is-enabled {
+    border-color: #20C9A6;
+    background: #20C9A6;
+}
+
+/* === Properties Manager === */
+.ls-properties-card {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 14px;
+    margin: 12px 0;
+}
+
+.ls-property-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.ls-property-row:last-child {
+    border-bottom: none;
+}
+
+/* === Responsive === */
+@media (max-width: 768px) {
+    .ls-tab-nav {
+        flex-wrap: wrap;
+        gap: 2px;
+    }
+    
+    .ls-tab {
+        min-width: 80px;
+        padding: 8px 12px 12px;
+        font-size: 0.85em;
+    }
+    
+    .ls-tab-content {
+        padding: 16px 12px;
+    }
+    
+    .ls-section {
+        padding: 14px;
+    }
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ls-tab-content {
+    animation: fadeIn 0.3s ease;
+}
+
+/* === Loading State === */
+.ls-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-muted);
+}
+
+.ls-loading::after {
+    content: '...';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* === Success/Error Messages === */
+.ls-message {
+    padding: 10px 14px;
+    border-radius: 5px;
+    margin: 10px 0;
+    font-size: 0.9em;
+}
+
+.ls-message.success {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4CAF50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.ls-message.error {
+    background: rgba(244, 67, 54, 0.1);
+    color: #F44336;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* === Template Variables Display === */
+.ls-variables {
+    background: var(--background-secondary);
+    border-radius: 6px;
+    padding: 14px;
+    margin: 12px 0;
+    font-family: var(--font-monospace);
+    font-size: 0.85em;
+}
+
+.ls-variables ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.ls-variables li {
+    margin: 4px 0;
+    color: var(--text-muted);
+}
+
+.ls-variables code {
+    color: #20C9A6;
+    font-weight: 600;
+}
+
+/* === Dark Mode Adjustments === */
+.theme-dark .ls-section {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.theme-dark .ls-section:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .ls-button {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.theme-dark .ls-button:hover {
+    box-shadow: 0 2px 8px rgba(32, 201, 166, 0.4);
+}
