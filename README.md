@@ -1,94 +1,149 @@
-# Obsidian Sample Plugin
+# OB English Learner
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+An Obsidian plugin for English learning with automatic video transcript fetching, AI-powered translation, and smart formatting.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## ✨ Features
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+### 🎥 Video Import
+- **One-Click Import**: Click the ribbon icon to quickly paste YouTube or Bilibili video links
+- **Automatic Transcript Fetching**: Automatically retrieves video transcripts without manual downloads
+- **Bilingual Subtitles**: Generates SRT subtitle files in both original and translated languages
 
-## First time developing plugins?
+### 🤖 AI-Powered Processing
+- **Multi-Provider Support**: Choose from DeepSeek, OpenAI, or Google Gemini for translation
+- **Smart Text Formatting**: Automatically adds proper punctuation and paragraph breaks
+- **Customizable Prompts**: Fine-tune translation and formatting behavior to your preferences
 
-Quick starting guide for new plugin devs:
+### 📝 Note Generation
+- **Customizable Templates**: Design your own note templates with flexible property system
+- **Organized Structure**: Automatically creates folders and manages assets
+- **Update Mode**: Modify and regenerate notes without losing manual edits
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+### 🎨 User Experience
+- **Bilingual Interface**: Settings displayed in both Chinese and English
+- **Auto-Save with Feedback**: All settings changes are automatically saved with clear notifications
+- **Folder Auto-Complete**: Smart folder path suggestions for easy navigation
+- **Connection Testing**: Verify AI API connections with detailed error messages
 
-## Releasing new releases
+## 📦 Installation
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### From GitHub Releases (Recommended)
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/yourusername/ob-english-learner/releases)
+2. Create folder `VaultFolder/.obsidian/plugins/ob-english-learner/`
+3. Copy the downloaded files into the folder
+4. Reload Obsidian and enable the plugin in Settings → Community Plugins
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+### Manual Build
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/ob-english-learner.git
+cd ob-english-learner
 
-## Adding your plugin to the community plugin list
+# Install dependencies
+npm install
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+# Build the plugin
+npm run build
 
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint ./src/`
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+# For development with auto-rebuild
+npm run dev
 ```
 
-If you have multiple URLs, you can also do:
+## 🚀 Quick Start
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+### 1. Configure AI Provider
+1. Open Settings → OB English Learner → AI Settings
+2. Select your preferred AI provider (DeepSeek, OpenAI, or Gemini)
+3. Enter your API key
+4. Test the connection to verify setup
+
+### 2. Set Storage Locations
+1. Go to Video Settings
+2. Configure folders for video notes and assets
+3. Use the folder suggester for easy path selection
+
+### 3. Import Your First Video
+1. Click the video icon in the left ribbon
+2. Paste a YouTube or Bilibili video URL
+3. Wait for processing (transcript fetching → translation → note generation)
+4. Find your bilingual note in the configured folder
+
+## ⚙️ Configuration
+
+### AI Providers
+
+| Provider | Models Supported | Notes |
+|----------|-----------------|-------|
+| **DeepSeek** | deepseek-chat, deepseek-reasoner | Fast and cost-effective |
+| **OpenAI** | GPT-4, GPT-3.5 | High quality translations |
+| **Google Gemini** | gemini-2.0-flash-exp, gemini-1.5-pro, etc. | Multiple model options |
+
+### Template System
+Customize your note output with properties:
+- **Source Properties**: Access video metadata (title, author, duration, etc.)
+- **Custom Properties**: Add your own frontmatter fields
+- **Markdown Template**: Full control over note structure
+
+### Smart Formatting
+The AI formatting feature adds:
+- Proper punctuation (periods, commas, question marks)
+- Natural paragraph breaks (2-4 sentences per paragraph)
+- Correct capitalization
+- No content modification (preserves original meaning)
+
+## 📋 Requirements
+
+- Obsidian v0.15.0 or higher
+- Node.js v16+ (for development)
+- Valid API key for at least one AI provider
+
+## 🛠️ Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development mode (auto-rebuild on changes)
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run build  # includes tsc -noEmit
 ```
 
-## API Documentation
+## 📝 Changelog
 
-See https://github.com/obsidianmd/obsidian-api
+### v1.0.0 (Initial Release)
+- ✅ YouTube and Bilibili video import
+- ✅ Multi-provider AI translation (DeepSeek, OpenAI, Gemini)
+- ✅ Smart text formatting with punctuation and paragraphing
+- ✅ Bilingual SRT subtitle generation
+- ✅ Customizable note templates with property system
+- ✅ Auto-save with notifications
+- ✅ Folder path auto-completion
+- ✅ AI connection testing with detailed feedback
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## 📄 License
+
+[MIT License](LICENSE)
+
+## 🙏 Acknowledgments
+
+- Built with [Obsidian Plugin API](https://github.com/obsidianmd/obsidian-api)
+- Inspired by language learning workflows in Obsidian community
+
+## 💬 Support
+
+If you encounter any issues or have suggestions:
+- Open an [issue on GitHub](https://github.com/yourusername/ob-english-learner/issues)
+- Check existing issues for solutions
+
+---
+
+Made with ❤️ for language learners
