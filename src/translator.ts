@@ -2,7 +2,7 @@ import { requestUrl, Notice } from 'obsidian';
 import { TranscriptLine } from './types';
 
 export interface TranslatorConfig {
-    provider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow' | 'custom';
+    provider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow' | 'videocaptioner' | 'custom';
     apiKey: string;
     model?: string;
     baseUrl?: string;
@@ -94,7 +94,7 @@ ${texts}
     private async callAI(prompt: string): Promise<string> {
         const { provider, apiKey, model, baseUrl } = this.config;
 
-        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'custom') {
+        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'videocaptioner' || provider === 'custom') {
             return await this.callOpenAICompatible(prompt, apiKey, model, baseUrl);
         } else if (provider === 'gemini') {
             return await this.callGemini(prompt, apiKey, model);
@@ -122,6 +122,8 @@ ${texts}
             defaultBaseUrl = 'https://api.deepseek.com/v1/chat/completions';
         } else if (this.config.provider === 'siliconflow') {
             defaultBaseUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+        } else if (this.config.provider === 'videocaptioner') {
+            defaultBaseUrl = 'https://api.videocaptioner.cn/v1/chat/completions';
         }
 
         const url = baseUrl || defaultBaseUrl;
@@ -131,6 +133,8 @@ ${texts}
             defaultModel = 'deepseek-chat';
         } else if (this.config.provider === 'siliconflow') {
             defaultModel = 'deepseek-ai/DeepSeek-V3';
+        } else if (this.config.provider === 'videocaptioner') {
+            defaultModel = 'gpt-3.5-turbo';
         }
 
         const response = await requestUrl({

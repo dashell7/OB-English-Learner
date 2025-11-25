@@ -625,6 +625,11 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				{ id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
 				{ id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B' },
 				{ id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B' }
+			],
+			'videocaptioner': [
+				{ id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+				{ id: 'gpt-4o', name: 'GPT-4o' },
+				{ id: 'gpt-4-turbo', name: 'GPT-4 Turbo' }
 			]
 		};
 
@@ -687,6 +692,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			.addDropdown(dropdown => dropdown
 				.addOption('deepseek', 'DeepSeek (推荐)')
 				.addOption('siliconflow', 'SiliconFlow / 硅基流动')
+				.addOption('videocaptioner', 'VideoCaptioner / 卡卡字幕助手')
 				.addOption('openai', 'OpenAI')
 				.addOption('gemini', 'Google Gemini')
 				.addOption('custom', 'Custom / 自定义 (OpenAI Compatible)')
@@ -696,15 +702,16 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					
 					if (value === 'custom') {
 						// Keep existing values or set defaults
+					} else if (value === 'videocaptioner') {
+						this.plugin.settings.aiBaseUrl = 'https://api.videocaptioner.cn/v1/chat/completions';
 					} else {
-						// Reset Base URL for standard providers
 						this.plugin.settings.aiBaseUrl = '';
+					}
 						// Reset model to the first option of the new provider
 						const newModels = models[value] || [];
 						if (newModels.length > 0) {
 							this.plugin.settings.aiModel = newModels[0].id;
 						}
-					}
 					
 					await this.saveAndNotify();
 					this.display(); // Refresh UI
