@@ -903,8 +903,9 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 	private async testAIConnection() {
 		const { aiProvider, aiApiKey, aiModel, aiBaseUrl } = this.plugin.settings;
 		
-		if (!aiApiKey) {
-			new Notice('❌ Please enter your API key first / 请先输入 API 密钥');
+		// Strict validation: check for empty, null, undefined, or whitespace-only strings
+		if (!aiApiKey || !aiApiKey.trim()) {
+			new Notice('❌ Please enter your API key first / 请先输入 API 密钥', 5000);
 			return;
 		}
 		

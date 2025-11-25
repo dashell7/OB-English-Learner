@@ -95,6 +95,11 @@ ${texts}
         model?: string,
         baseUrl?: string
     ): Promise<string> {
+        // Validate API key before making request
+        if (!apiKey || !apiKey.trim()) {
+            throw new Error('API key is required but not provided or is empty');
+        }
+
         const url = baseUrl || 
             (this.config.provider === 'deepseek' 
                 ? 'https://api.deepseek.com/v1/chat/completions'
@@ -107,7 +112,7 @@ ${texts}
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${apiKey.trim()}`
             },
             body: JSON.stringify({
                 model: model || defaultModel,
@@ -134,8 +139,13 @@ ${texts}
      * 调用Gemini API
      */
     private async callGemini(prompt: string, apiKey: string, model?: string): Promise<string> {
+        // Validate API key before making request
+        if (!apiKey || !apiKey.trim()) {
+            throw new Error('API key is required but not provided or is empty');
+        }
+
         const modelName = model || 'gemini-1.5-flash';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey.trim()}`;
 
         const response = await requestUrl({
             url,
