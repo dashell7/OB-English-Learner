@@ -151,24 +151,31 @@ export default class LinguaSyncPlugin extends Plugin {
 			const videoData = await this.fetchVideoDataWithProgress(url, translatorConfig, progress);
 
 			// Step 4.5: AI Segmentation & Punctuation Refinement (if enabled)
-			if (this.settings.enableAIFormatting && this.settings.aiApiKey && videoData.transcript && videoData.transcript.length > 0 && videoData.transcript[0].lang === 'en') {
-				try {
-					progress.nextStep('AI refining transcript segmentation...');
-					console.log('[LinguaSync] Refining transcript with AI...');
-					
-					const { AITranslator } = await import('./src/translator');
-					const translator = new AITranslator({
-						provider: this.settings.aiProvider,
-						apiKey: this.settings.aiApiKey,
-						model: this.settings.aiModel,
-						baseUrl: this.settings.aiBaseUrl
-					});
-					
-					videoData.transcript = await translator.segmentAndPunctuate(videoData.transcript);
-					console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.transcript.length} lines`);
-				} catch (error) {
-					console.error('[LinguaSync] AI segmentation failed, using original:', error);
-					// Continue with original transcript
+			if (videoData.transcript && videoData.transcript.length > 0) {
+				const lang = videoData.transcript[0].lang;
+				console.log(`[LinguaSync] Transcript language detected: ${lang}`);
+				
+				if (this.settings.enableAIFormatting && this.settings.aiApiKey && lang && lang.startsWith('en')) {
+					try {
+						progress.nextStep('AI refining transcript segmentation...');
+						console.log('[LinguaSync] Refining transcript with AI...');
+						
+						const { AITranslator } = await import('./src/translator');
+						const translator = new AITranslator({
+							provider: this.settings.aiProvider,
+							apiKey: this.settings.aiApiKey,
+							model: this.settings.aiModel,
+							baseUrl: this.settings.aiBaseUrl
+						});
+						
+						videoData.transcript = await translator.segmentAndPunctuate(videoData.transcript);
+						console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.transcript.length} lines`);
+					} catch (error) {
+						console.error('[LinguaSync] AI segmentation failed, using original:', error);
+						// Continue with original transcript
+					}
+				} else if (this.settings.enableAIFormatting && (!lang || !lang.startsWith('en'))) {
+					console.log('[LinguaSync] AI formatting skipped: Language is not English');
 				}
 			}
 

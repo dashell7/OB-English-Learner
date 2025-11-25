@@ -76,9 +76,9 @@ export class NoteGenerator {
         const srtPaths = await this.ensureSRTFiles(transcript, translatedTranscript, fileName, subtitlesFolder);
 
         // Determine which transcript to display (prefer English)
-        const displayTranscript = transcript[0]?.lang === 'en' 
+        const displayTranscript = transcript[0]?.lang && transcript[0].lang.startsWith('en')
             ? transcript 
-            : (translatedTranscript && translatedTranscript[0]?.lang === 'en' 
+            : (translatedTranscript && translatedTranscript[0]?.lang && translatedTranscript[0].lang.startsWith('en') 
                 ? translatedTranscript 
                 : transcript);
 
@@ -249,9 +249,6 @@ langr-origin: {{channel}} - YouTube
 {{srtLinks}}`;
     }
 
-    /**
-     * Ensure multiple SRT files exist in video's Subtitles folder
-     */
     private async ensureSRTFiles(
         primaryTranscript: any[], 
         translatedTranscript: any[] | undefined, 
@@ -267,7 +264,8 @@ langr-origin: {{channel}} - YouTube
         console.log(`[OB English Learner] Primary language: ${primaryLang}, Translated: ${translatedLang || 'none'}`);
 
         // Generate primary SRT (could be EN or ZH)
-        const primaryLangLabel = primaryLang === 'zh' ? 'ZH' : 'EN';
+        const isPrimaryEn = primaryLang.startsWith('en');
+        const primaryLangLabel = isPrimaryEn ? 'EN' : 'ZH';
         const primarySRTFileName = `${fileName} - ${primaryLangLabel}.srt`;
         const primarySRTPath = normalizePath(`${subtitlesFolder}/${primarySRTFileName}`);
         
@@ -281,7 +279,7 @@ langr-origin: {{channel}} - YouTube
             await this.app.vault.create(primarySRTPath, primarySRTContent);
         }
         
-        if (primaryLang === 'en') {
+        if (isPrimaryEn) {
             result.english = primarySRTFileName;
         } else {
             result.chinese = primarySRTFileName;
@@ -289,7 +287,8 @@ langr-origin: {{channel}} - YouTube
 
         // Generate translated SRT if available
         if (translatedTranscript && translatedTranscript.length > 0) {
-            const translatedLangLabel = translatedLang === 'zh' ? 'ZH' : 'EN';
+            const isTranslatedEn = translatedLang && translatedLang.startsWith('en');
+            const translatedLangLabel = isTranslatedEn ? 'EN' : 'ZH';
             const translatedSRTFileName = `${fileName} - ${translatedLangLabel}.srt`;
             const translatedSRTPath = normalizePath(`${subtitlesFolder}/${translatedSRTFileName}`);
             
@@ -302,7 +301,7 @@ langr-origin: {{channel}} - YouTube
                 await this.app.vault.create(translatedSRTPath, translatedSRTContent);
             }
             
-            if (translatedLang === 'zh') {
+            if (translatedLang === 'zh' || (translatedLang && translatedLang.startsWith('zh'))) {
                 result.chinese = translatedSRTFileName;
             } else {
                 result.english = translatedSRTFileName;
@@ -315,11 +314,11 @@ langr-origin: {{channel}} - YouTube
                 
                 const existingBiSRT = this.app.vault.getAbstractFileByPath(bilingualSRTPath);
                 if (existingBiSRT) {
-                    console.log('[OB English Learner] SRT already exists, keeping: ${bilingualSRTFileName}');
+                    console.log(`[OB English Learner] SRT already exists, keeping: ${bilingualSRTFileName}`);
                 } else {
-                    console.log('[OB English Learner] Creating missing SRT: ${bilingualSRTFileName}');
-                    const enLines = primaryLang === 'en' ? primaryTranscript : translatedTranscript;
-                    const zhLines = primaryLang === 'zh' ? primaryTranscript : translatedTranscript;
+                    console.log(`[OB English Learner] Creating missing SRT: ${bilingualSRTFileName}`);
+                    const enLines = isPrimaryEn ? primaryTranscript : translatedTranscript;
+                    const zhLines = !isPrimaryEn ? primaryTranscript : translatedTranscript;
                     
                     const bilingualSRTContent = TranscriptParser.convertToBilingualSRT(enLines, zhLines);
                     await this.app.vault.create(bilingualSRTPath, bilingualSRTContent);
