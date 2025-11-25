@@ -273,6 +273,16 @@ export class YouTubeScraper {
             let transcript: TranscriptLine[];
             let translatedTranscript: TranscriptLine[] | undefined;
             
+            // Resegment transcripts to ensure full sentences
+            if (enTranscript) {
+                console.log('[LinguaSync] Resegmenting English transcript...');
+                enTranscript = this.resegmentTranscript(enTranscript);
+            }
+            if (zhTranscript) {
+                console.log('[LinguaSync] Resegmenting Chinese transcript...');
+                zhTranscript = this.resegmentTranscript(zhTranscript);
+            }
+            
             if (enTranscript) {
                 // English is available - use it as primary for note display
                 console.log('[LinguaSync] ✅ Using English as primary transcript (for note display)');
@@ -302,6 +312,93 @@ export class YouTubeScraper {
             console.error('[LinguaSync] YTranscript failed:', error);
             throw new Error(`Failed to fetch transcript: ${error.message}`);
         }
+    }
+
+    /**
+     * Resegment transcript based on punctuation to form complete sentences
+     */
+    private static resegmentTranscript(lines: TranscriptLine[]): TranscriptLine[] {
+        if (!lines || lines.length === 0) return [];
+
+        // Check if transcript has punctuation
+        const allText = lines.map(l => l.text).join(' ');
+        const punctuationCount = (allText.match(/[.!?。！？]/g) || []).length;
+        
+        // If very few punctuation marks (e.g. < 1 per 10 lines), assume it's unpunctuated
+        // and return original lines to avoid merging everything into one block
+        if (punctuationCount < lines.length / 10) {
+            console.log('[LinguaSync] Few punctuation marks detected, skipping resegmentation');
+            return lines;
+        }
+
+        // Flatten text and calculate approximate char-level timing
+        const allChars: { char: string, time: number }[] = [];
+        
+        for (const line of lines) {
+            if (!line.text) continue;
+            const safeText = line.text;
+            const durationPerChar = (line.duration || 0) / safeText.length;
+            
+            for (let i = 0; i < safeText.length; i++) {
+                allChars.push({
+                    char: safeText[i],
+                    time: line.start + (i * durationPerChar)
+                });
+            }
+            // Add implicit space between original lines
+            allChars.push({ char: ' ', time: line.start + line.duration });
+        }
+
+        const newLines: TranscriptLine[] = [];
+        let currentText = '';
+        let startTime = allChars.length > 0 ? allChars[0].time : 0;
+        
+        const sentenceEndRegex = /[.!?。！？]/;
+
+        for (let i = 0; i < allChars.length; i++) {
+            const c = allChars[i];
+            currentText += c.char;
+
+            const isTerminator = sentenceEndRegex.test(c.char);
+            
+            // Look ahead to avoid splitting on "..." or "!!"
+            const nextChar = i + 1 < allChars.length ? allChars[i+1].char : '';
+            const isNextTerminator = sentenceEndRegex.test(nextChar);
+            
+            // Basic check for abbreviations (Mr. Dr. etc) - simplified
+            const isAbbreviation = /\b(Mr|Mrs|Ms|Dr|Prof|St|Ave|Co|Inc|Ltd)\.$/i.test(currentText.trim());
+            
+            if (isTerminator && !isNextTerminator && !isAbbreviation) {
+                const endTime = c.time;
+                const finalText = currentText.trim();
+                
+                if (finalText) {
+                    newLines.push({
+                        text: finalText,
+                        start: startTime,
+                        duration: Math.max(0.1, endTime - startTime),
+                        lang: lines[0].lang
+                    });
+                }
+                
+                currentText = '';
+                if (i + 1 < allChars.length) {
+                    startTime = allChars[i+1].time;
+                }
+            }
+        }
+
+        // Add remaining text
+        if (currentText.trim()) {
+             newLines.push({
+                text: currentText.trim(),
+                start: startTime,
+                duration: Math.max(0.1, (allChars[allChars.length-1]?.time || startTime) - startTime),
+                lang: lines[0].lang
+            });
+        }
+
+        return newLines;
     }
 
     /**
