@@ -35,7 +35,7 @@ export interface LinguaSyncSettings {
     enableAITranslation: boolean;
     enableAIFormatting: boolean;  // AI punctuation and paragraph formatting
     aiFormattingPrompt: string;  // Custom prompt for text formatting
-    aiProvider: 'openai' | 'deepseek' | 'gemini';
+    aiProvider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow';
     aiApiKey: string;
     aiModel: string;
     aiBaseUrl: string;

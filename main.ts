@@ -579,6 +579,12 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				{ id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
 				{ id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
 				{ id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash-8B' }
+			],
+			'siliconflow': [
+				{ id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
+				{ id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
+				{ id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B' },
+				{ id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B' }
 			]
 		};
 
@@ -640,6 +646,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			.setDesc('Choose your AI service provider / 选择 AI 服务商')
 			.addDropdown(dropdown => dropdown
 				.addOption('deepseek', 'DeepSeek (推荐)')
+				.addOption('siliconflow', 'SiliconFlow / 硅基流动')
 				.addOption('openai', 'OpenAI')
 				.addOption('gemini', 'Google Gemini')
 				.setValue(this.plugin.settings.aiProvider)

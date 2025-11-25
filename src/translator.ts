@@ -2,7 +2,7 @@ import { requestUrl } from 'obsidian';
 import { TranscriptLine } from './types';
 
 export interface TranslatorConfig {
-    provider: 'openai' | 'deepseek' | 'gemini';
+    provider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow';
     apiKey: string;
     model?: string;
     baseUrl?: string;
@@ -86,7 +86,7 @@ ${texts}
     private async callAI(prompt: string): Promise<string> {
         const { provider, apiKey, model, baseUrl } = this.config;
 
-        if (provider === 'openai' || provider === 'deepseek') {
+        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow') {
             return await this.callOpenAICompatible(prompt, apiKey, model, baseUrl);
         } else if (provider === 'gemini') {
             return await this.callGemini(prompt, apiKey, model);
@@ -109,12 +109,21 @@ ${texts}
             throw new Error('API key is required but not provided or is empty');
         }
 
-        const url = baseUrl || 
-            (this.config.provider === 'deepseek' 
-                ? 'https://api.deepseek.com/v1/chat/completions'
-                : 'https://api.openai.com/v1/chat/completions');
+        let defaultBaseUrl = 'https://api.openai.com/v1/chat/completions';
+        if (this.config.provider === 'deepseek') {
+            defaultBaseUrl = 'https://api.deepseek.com/v1/chat/completions';
+        } else if (this.config.provider === 'siliconflow') {
+            defaultBaseUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+        }
 
-        const defaultModel = this.config.provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+        const url = baseUrl || defaultBaseUrl;
+
+        let defaultModel = 'gpt-4o-mini';
+        if (this.config.provider === 'deepseek') {
+            defaultModel = 'deepseek-chat';
+        } else if (this.config.provider === 'siliconflow') {
+            defaultModel = 'deepseek-ai/DeepSeek-V3';
+        }
 
         const response = await requestUrl({
             url,
