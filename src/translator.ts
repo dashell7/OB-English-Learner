@@ -12,6 +12,15 @@ export class AITranslator {
     constructor(private config: TranslatorConfig) {}
 
     /**
+     * Test connection by making a simple API call
+     * Throws error if connection fails
+     */
+    async testConnection(): Promise<void> {
+        const prompt = "Hello";
+        await this.callAI(prompt);
+    }
+
+    /**
      * 翻译整个字幕数组
      */
     async translateTranscript(lines: TranscriptLine[]): Promise<TranscriptLine[]> {

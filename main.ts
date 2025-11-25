@@ -921,15 +921,8 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				baseUrl: aiBaseUrl
 			});
 			
-			// Test with a simple translation
-			const testLines = [{
-				start: 0,
-				duration: 1,
-				text: 'Hello',
-				lang: 'en'
-			}];
-			
-			await translator.translateTranscript(testLines);
+			// Test with a simple connection check (throws error on failure)
+			await translator.testConnection();
 			
 			notice.hide();
 			new Notice('✅ Connection successful! / 连接成功！\nAI service is ready.', 5000);
