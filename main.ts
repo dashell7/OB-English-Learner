@@ -170,6 +170,16 @@ export default class LinguaSyncPlugin extends Plugin {
 						
 						videoData.transcript = await translator.segmentAndPunctuate(videoData.transcript);
 						console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.transcript.length} lines`);
+
+						// If the transcript was refined, we MUST re-translate it to keep alignment
+						// otherwise the old translatedTranscript (based on fragmented lines) will be out of sync
+						if (this.settings.enableAITranslation) {
+							progress.nextStep('AI translating refined transcript...');
+							console.log('[LinguaSync] Re-translating refined transcript...');
+							videoData.translatedTranscript = await translator.translateTranscript(videoData.transcript);
+							console.log(`[LinguaSync] ✅ Re-translation completed: ${videoData.translatedTranscript.length} lines`);
+						}
+
 					} catch (error) {
 						console.error('[LinguaSync] AI segmentation failed, using original:', error);
 						// Continue with original transcript
