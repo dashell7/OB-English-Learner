@@ -182,6 +182,7 @@ export default class LinguaSyncPlugin extends Plugin {
 
 					} catch (error) {
 						console.error('[LinguaSync] AI segmentation failed, using original:', error);
+						new Notice(`AI Segmentation failed: ${error.message}`);
 						// Continue with original transcript
 					}
 				} else if (this.settings.enableAIFormatting && (!lang || !lang.startsWith('en'))) {

@@ -1,4 +1,4 @@
-import { requestUrl } from 'obsidian';
+import { requestUrl, Notice } from 'obsidian';
 import { TranscriptLine } from './types';
 
 export interface TranslatorConfig {
@@ -9,6 +9,8 @@ export interface TranslatorConfig {
 }
 
 export class AITranslator {
+    private hasNotifiedError = false;
+
     constructor(private config: TranslatorConfig) {}
 
     /**
@@ -71,6 +73,12 @@ ${texts}
             return this.parseTranslationResponse(response, lines);
         } catch (error) {
             console.error('[LinguaSync] Translation error:', error);
+            
+            if (!this.hasNotifiedError) {
+                new Notice(`Translation failed: ${error.message}. Check console for details.`);
+                this.hasNotifiedError = true;
+            }
+
             // 翻译失败时返回原文作为占位
             return lines.map(line => ({
                 ...line,
