@@ -14,72 +14,66 @@ export class NoteGenerator {
     async createVideoNote(videoData: VideoData, isUpdate: boolean = false): Promise<TFile> {
         const { metadata, transcript, translatedTranscript } = videoData;
 
-        // Generate file name (sanitize title)
-        console.log('[OB English Learner] 🔍 DEBUG - Original title:', metadata.title);
-        const fileName = this.sanitizeFileName(metadata.title);
-        console.log('[OB English Learner] 🔍 DEBUG - Sanitized fileName:', fileName);
+        // 1. Determine Note and Folder Paths
+        // Default assumption based on title
+        const defaultFileName = this.sanitizeFileName(metadata.title);
+        let fileName = defaultFileName;
+        let videoFolder = normalizePath(`${this.settings.videoFolder}/${fileName}`);
+        let notePath = normalizePath(`${this.settings.videoFolder}/${fileName}.md`);
         
-        // Create folder structure: Videos/视频标题/
-        const videoFolder = normalizePath(`${this.settings.videoFolder}/${fileName}`);
-        const subtitlesFolder = normalizePath(`${videoFolder}/Subtitles`);
-        // Note: For Language Learner compatibility, keep the flat structure
-        const notePath = normalizePath(`${this.settings.videoFolder}/${fileName}.md`);
+        // If update mode, try to find the actual existing note to respect user renames/moves
+        let existingNote = this.app.vault.getAbstractFileByPath(notePath);
+        
+        if (isUpdate && !existingNote) {
+             // Fallback: Search by content (URL) is expensive, so we try to search by name similarity or just assume default.
+             // Since main.ts already found the note to set isUpdate=true, we assume it exists.
+             // Let's check if we can find it by URL if default path failed.
+             const files = this.app.vault.getMarkdownFiles();
+             for (const file of files) {
+                 if (!file.path.startsWith(this.settings.videoFolder)) continue;
+                 // Optimization: Only check files that look related or check all if needed
+                 // Here we just check all in video folder for robustness
+                 if (file.basename === fileName) { // Should have been found by getAbstractFileByPath, but just in case
+                     existingNote = file;
+                     break;
+                 }
+             }
+        }
+
+        if (existingNote instanceof TFile) {
+            // Use existing file's structure
+            fileName = existingNote.basename;
+            videoFolder = existingNote.parent ? existingNote.parent.path : this.settings.videoFolder;
+            notePath = existingNote.path;
+            console.log('[OB English Learner] 🔄 Update mode: Targeting existing note at', notePath);
+        } else {
+            console.log('[OB English Learner] 📥 Creating new note structure...');
+        }
 
         // Ensure folders exist
+        const subtitlesFolder = normalizePath(`${videoFolder}/Subtitles`);
         await this.ensureFolderExists(videoFolder);
         await this.ensureFolderExists(subtitlesFolder);
 
-        // Check if note already exists
-        const existingNote = this.app.vault.getAbstractFileByPath(notePath);
-        
-        // In update mode, reuse existing assets
+        // 2. Check/Create Thumbnail
         let coverPath = '';
-        let srtPaths: any = {};
-        
-        if (isUpdate && existingNote) {
-            console.log('[OB English Learner] 🔄 Update mode: Reusing existing assets...');
+        if (this.settings.autoDownloadThumbnails) {
+            const imgName = `${fileName}.jpg`;
+            const imgPath = normalizePath(`${videoFolder}/${imgName}`);
             
-            // Read existing note to extract cover path and SRT paths
-            const existingContent = await this.app.vault.read(existingNote as TFile);
-            
-            // Extract cover path from frontmatter
-            const coverMatch = existingContent.match(/^cover:\s*"?\[\[(.+?)\]\]"?$/m);
-            if (coverMatch) {
-                // Remove any quotes from the extracted path (in case of old incorrect format)
-                coverPath = coverMatch[1].replace(/^["']|["']$/g, '');
-                console.log('[OB English Learner] ✅ Reusing cover:', coverPath);
+            // Check if cover exists
+            if (this.app.vault.getAbstractFileByPath(imgPath)) {
+                 console.log('[OB English Learner] ✅ Cover already exists, reusing:', imgName);
+                 coverPath = imgName;
+            } else {
+                 console.log('[OB English Learner] 📥 Downloading missing cover...');
+                 coverPath = await this.downloadThumbnail(metadata.thumbnailUrl, fileName, videoFolder);
             }
-            
-            // Extract SRT file names from existing content
-            const enSrtMatch = existingContent.match(/English:\s*\[\[(.+?\.srt)\]\]/);
-            const zhSrtMatch = existingContent.match(/中文:\s*\[\[(.+?\.srt)\]\]/);
-            const biSrtMatch = existingContent.match(/EN-ZH:\s*\[\[(.+?\.srt)\]\]/);
-            
-            if (enSrtMatch) {
-                srtPaths.english = enSrtMatch[1].split('/').pop();
-                console.log('[OB English Learner] ✅ Reusing EN SRT:', srtPaths.english);
-            }
-            if (zhSrtMatch) {
-                srtPaths.chinese = zhSrtMatch[1].split('/').pop();
-                console.log('[OB English Learner] ✅ Reusing ZH SRT:', srtPaths.chinese);
-            }
-            if (biSrtMatch) {
-                srtPaths.bilingual = biSrtMatch[1].split('/').pop();
-                console.log('[OB English Learner] ✅ Reusing Bilingual SRT:', srtPaths.bilingual);
-            }
-        } else {
-            // Normal mode: Generate all assets
-            console.log('[OB English Learner] 📥 Creating new note with all assets...');
-            
-            // Download thumbnail if enabled
-            if (this.settings.autoDownloadThumbnails) {
-                coverPath = await this.downloadThumbnail(metadata.thumbnailUrl, fileName, videoFolder);
-                console.log('[OB English Learner] 🔍 DEBUG - coverPath from downloadThumbnail:', coverPath);
-            }
-
-            // Generate SRT files
-            srtPaths = await this.createSRTFiles(transcript, translatedTranscript, fileName, subtitlesFolder);
         }
+
+        // 3. Check/Create SRTs
+        // This ensures missing files are regenerated, but existing ones are preserved
+        const srtPaths = await this.ensureSRTFiles(transcript, translatedTranscript, fileName, subtitlesFolder);
 
         // Determine which transcript to display (prefer English)
         const displayTranscript = transcript[0]?.lang === 'en' 
@@ -114,10 +108,10 @@ export class NoteGenerator {
 
         // Create or update the file
         let file: TFile;
-        if (isUpdate && existingNote) {
+        if (existingNote instanceof TFile) {
             // Update existing file
-            await this.app.vault.modify(existingNote as TFile, fullContent);
-            file = existingNote as TFile;
+            await this.app.vault.modify(existingNote, fullContent);
+            file = existingNote;
             console.log('[OB English Learner] ✅ Note updated:', file.basename);
         } else {
             // Create new file
@@ -256,9 +250,9 @@ langr-origin: {{channel}} - YouTube
     }
 
     /**
-     * Create multiple SRT files in video's Subtitles folder
+     * Ensure multiple SRT files exist in video's Subtitles folder
      */
-    private async createSRTFiles(
+    private async ensureSRTFiles(
         primaryTranscript: any[], 
         translatedTranscript: any[] | undefined, 
         fileName: string,
@@ -274,66 +268,63 @@ langr-origin: {{channel}} - YouTube
 
         // Generate primary SRT (could be EN or ZH)
         const primaryLangLabel = primaryLang === 'zh' ? 'ZH' : 'EN';
-        console.log(`[OB English Learner] Creating ${primaryLangLabel} SRT...`);
-        const primarySRTContent = TranscriptParser.convertToSRT(primaryTranscript);
         const primarySRTFileName = `${fileName} - ${primaryLangLabel}.srt`;
         const primarySRTPath = normalizePath(`${subtitlesFolder}/${primarySRTFileName}`);
         
-        // Check if file exists, delete and recreate
+        // Check if file exists
         const existingPrimarySRT = this.app.vault.getAbstractFileByPath(primarySRTPath);
         if (existingPrimarySRT) {
-            console.log(`[OB English Learner] Overwriting existing ${primaryLangLabel} SRT...`);
-            await this.app.vault.delete(existingPrimarySRT);
+            console.log(`[OB English Learner] SRT already exists, keeping: ${primarySRTFileName}`);
+        } else {
+            console.log(`[OB English Learner] Creating missing SRT: ${primarySRTFileName}`);
+            const primarySRTContent = TranscriptParser.convertToSRT(primaryTranscript);
+            await this.app.vault.create(primarySRTPath, primarySRTContent);
         }
-        await this.app.vault.create(primarySRTPath, primarySRTContent);
         
         if (primaryLang === 'en') {
             result.english = primarySRTFileName;
         } else {
             result.chinese = primarySRTFileName;
         }
-        console.log(`[OB English Learner] ✅ ${primaryLangLabel} SRT created:`, primarySRTFileName);
 
         // Generate translated SRT if available
         if (translatedTranscript && translatedTranscript.length > 0) {
             const translatedLangLabel = translatedLang === 'zh' ? 'ZH' : 'EN';
-            console.log(`[OB English Learner] Creating ${translatedLangLabel} SRT...`);
-            const translatedSRTContent = TranscriptParser.convertToSRT(translatedTranscript);
             const translatedSRTFileName = `${fileName} - ${translatedLangLabel}.srt`;
             const translatedSRTPath = normalizePath(`${subtitlesFolder}/${translatedSRTFileName}`);
             
             const existingTranslatedSRT = this.app.vault.getAbstractFileByPath(translatedSRTPath);
             if (existingTranslatedSRT) {
-                console.log(`[OB English Learner] Overwriting existing ${translatedLangLabel} SRT...`);
-                await this.app.vault.delete(existingTranslatedSRT);
+                console.log(`[OB English Learner] SRT already exists, keeping: ${translatedSRTFileName}`);
+            } else {
+                console.log(`[OB English Learner] Creating missing SRT: ${translatedSRTFileName}`);
+                const translatedSRTContent = TranscriptParser.convertToSRT(translatedTranscript);
+                await this.app.vault.create(translatedSRTPath, translatedSRTContent);
             }
-            await this.app.vault.create(translatedSRTPath, translatedSRTContent);
             
             if (translatedLang === 'zh') {
                 result.chinese = translatedSRTFileName;
             } else {
                 result.english = translatedSRTFileName;
             }
-            console.log(`[OB English Learner] ✅ ${translatedLangLabel} SRT created:`, translatedSRTFileName);
 
             // Generate Bilingual SRT (only if we have both EN and ZH)
             if (primaryLang !== translatedLang) {
-                console.log('[OB English Learner] Creating Bilingual SRT...');
-                const enLines = primaryLang === 'en' ? primaryTranscript : translatedTranscript;
-                const zhLines = primaryLang === 'zh' ? primaryTranscript : translatedTranscript;
-                
-                const bilingualSRTContent = TranscriptParser.convertToBilingualSRT(enLines, zhLines);
                 const bilingualSRTFileName = `${fileName} - EN-ZH.srt`;
                 const bilingualSRTPath = normalizePath(`${subtitlesFolder}/${bilingualSRTFileName}`);
                 
                 const existingBiSRT = this.app.vault.getAbstractFileByPath(bilingualSRTPath);
                 if (existingBiSRT) {
-                    console.log('[OB English Learner] Overwriting existing Bilingual SRT...');
-                    await this.app.vault.delete(existingBiSRT);
+                    console.log('[OB English Learner] SRT already exists, keeping: ${bilingualSRTFileName}');
+                } else {
+                    console.log('[OB English Learner] Creating missing SRT: ${bilingualSRTFileName}');
+                    const enLines = primaryLang === 'en' ? primaryTranscript : translatedTranscript;
+                    const zhLines = primaryLang === 'zh' ? primaryTranscript : translatedTranscript;
+                    
+                    const bilingualSRTContent = TranscriptParser.convertToBilingualSRT(enLines, zhLines);
+                    await this.app.vault.create(bilingualSRTPath, bilingualSRTContent);
                 }
-                await this.app.vault.create(bilingualSRTPath, bilingualSRTContent);
                 result.bilingual = bilingualSRTFileName;
-                console.log('[OB English Learner] ✅ Bilingual SRT created:', bilingualSRTFileName);
             }
         } else {
             console.log('[OB English Learner] ℹ️ No translated transcript available');
