@@ -627,9 +627,11 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				{ id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B' }
 			],
 			'videocaptioner': [
-				{ id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+				{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini (最新小型)' },
+				{ id: 'gpt-4.1', name: 'GPT-4.1 (最新旗舰)' },
 				{ id: 'gpt-4o', name: 'GPT-4o' },
-				{ id: 'gpt-4-turbo', name: 'GPT-4 Turbo' }
+				{ id: 'claude-3.5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+				{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
 			]
 		};
 

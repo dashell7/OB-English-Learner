@@ -134,7 +134,7 @@ ${texts}
         } else if (this.config.provider === 'siliconflow') {
             defaultModel = 'deepseek-ai/DeepSeek-V3';
         } else if (this.config.provider === 'videocaptioner') {
-            defaultModel = 'gpt-3.5-turbo';
+            defaultModel = 'gpt-4.1-mini';
         }
 
         const response = await requestUrl({
