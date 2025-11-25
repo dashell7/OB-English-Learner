@@ -22,6 +22,8 @@ export interface VideoData {
     metadata: VideoMetadata;
     transcript: TranscriptLine[];
     translatedTranscript?: TranscriptLine[];  // For bilingual support
+    refinedTranscript?: TranscriptLine[];     // AI segmented & punctuated transcript
+    refinedTranslatedTranscript?: TranscriptLine[]; // Translated version of refined transcript
 }
 
 export interface LinguaSyncSettings {
@@ -33,7 +35,8 @@ export interface LinguaSyncSettings {
     generateBilingualTranscript: boolean;
     // AI Translation
     enableAITranslation: boolean;
-    enableAIFormatting: boolean;  // AI punctuation and paragraph formatting
+    enableAIFormatting: boolean;  // For Note content
+    enableAISubtitles: boolean;   // For SRT files
     aiFormattingPrompt: string;  // Custom prompt for text formatting
     aiProvider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow' | 'videocaptioner' | 'custom';
     aiApiKey: string;

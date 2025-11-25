@@ -72,15 +72,27 @@ export class NoteGenerator {
         }
 
         // 3. Check/Create SRTs
+        // Determine which transcript to use for SRT files
+        // Use refined if available AND enableAISubtitles is true
+        const useRefinedForSRT = this.settings.enableAISubtitles && videoData.refinedTranscript;
+        const srtTranscript = useRefinedForSRT ? videoData.refinedTranscript! : videoData.transcript;
+        const srtTranslated = useRefinedForSRT ? videoData.refinedTranslatedTranscript : videoData.translatedTranscript;
+
         // This ensures missing files are regenerated, but existing ones are preserved
-        const srtPaths = await this.ensureSRTFiles(transcript, translatedTranscript, fileName, subtitlesFolder);
+        const srtPaths = await this.ensureSRTFiles(srtTranscript, srtTranslated, fileName, subtitlesFolder);
+
+        // Determine which transcript to use for NOTE content
+        // Use refined if available AND enableAIFormatting is true
+        const useRefinedForNote = this.settings.enableAIFormatting && videoData.refinedTranscript;
+        const noteTranscript = useRefinedForNote ? videoData.refinedTranscript! : videoData.transcript;
+        const noteTranslated = useRefinedForNote ? videoData.refinedTranslatedTranscript : videoData.translatedTranscript;
 
         // Determine which transcript to display (prefer English)
-        const displayTranscript = transcript[0]?.lang && transcript[0].lang.startsWith('en')
-            ? transcript 
-            : (translatedTranscript && translatedTranscript[0]?.lang && translatedTranscript[0].lang.startsWith('en') 
-                ? translatedTranscript 
-                : transcript);
+        const displayTranscript = noteTranscript[0]?.lang && noteTranscript[0].lang.startsWith('en')
+            ? noteTranscript 
+            : (noteTranslated && noteTranslated[0]?.lang && noteTranslated[0].lang.startsWith('en') 
+                ? noteTranslated 
+                : noteTranscript);
 
         // AI format transcript if enabled (add punctuation and paragraphs)
         let formattedTranscriptText: string | null = null;

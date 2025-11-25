@@ -65,7 +65,8 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	generateBilingualTranscript: true,
 	// AI Translation & Formatting
 	enableAITranslation: false,
-	enableAIFormatting: false,  // AI punctuation and paragraph formatting
+	enableAIFormatting: false,  // Note content
+	enableAISubtitles: false,   // SRT files
 	aiFormattingPrompt: DEFAULT_FORMATTING_PROMPT,
 	aiProvider: 'deepseek',
 	aiApiKey: '',
@@ -155,7 +156,10 @@ export default class LinguaSyncPlugin extends Plugin {
 				const lang = videoData.transcript[0].lang;
 				console.log(`[LinguaSync] Transcript language detected: ${lang}`);
 				
-				if (this.settings.enableAIFormatting && this.settings.aiApiKey && lang && lang.startsWith('en')) {
+				const needsRefinement = (this.settings.enableAIFormatting || this.settings.enableAISubtitles) 
+					&& this.settings.aiApiKey && lang && lang.startsWith('en');
+
+				if (needsRefinement) {
 					try {
 						progress.nextStep('AI refining transcript segmentation...');
 						console.log('[LinguaSync] Refining transcript with AI...');
@@ -168,16 +172,15 @@ export default class LinguaSyncPlugin extends Plugin {
 							baseUrl: this.settings.aiBaseUrl
 						});
 						
-						videoData.transcript = await translator.segmentAndPunctuate(videoData.transcript);
-						console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.transcript.length} lines`);
+						videoData.refinedTranscript = await translator.segmentAndPunctuate(videoData.transcript);
+						console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.refinedTranscript.length} lines`);
 
 						// If the transcript was refined, we MUST re-translate it to keep alignment
-						// otherwise the old translatedTranscript (based on fragmented lines) will be out of sync
 						if (this.settings.enableAITranslation) {
 							progress.nextStep('AI translating refined transcript...');
 							console.log('[LinguaSync] Re-translating refined transcript...');
-							videoData.translatedTranscript = await translator.translateTranscript(videoData.transcript);
-							console.log(`[LinguaSync] ✅ Re-translation completed: ${videoData.translatedTranscript.length} lines`);
+							videoData.refinedTranslatedTranscript = await translator.translateTranscript(videoData.refinedTranscript);
+							console.log(`[LinguaSync] ✅ Re-translation completed: ${videoData.refinedTranslatedTranscript.length} lines`);
 						}
 
 					} catch (error) {
@@ -185,7 +188,7 @@ export default class LinguaSyncPlugin extends Plugin {
 						new Notice(`AI Segmentation failed: ${error.message}`);
 						// Continue with original transcript
 					}
-				} else if (this.settings.enableAIFormatting && (!lang || !lang.startsWith('en'))) {
+				} else if ((this.settings.enableAIFormatting || this.settings.enableAISubtitles) && (!lang || !lang.startsWith('en'))) {
 					console.log('[LinguaSync] AI formatting skipped: Language is not English');
 				}
 			}
@@ -646,14 +649,24 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(section)
-			.setName(this.createBilingualLabel('Enable AI Formatting', '智能断句与标点'))
-			.setDesc('Auto-add punctuation and break paragraphs / 自动添加标点符号并优化段落')
+			.setName(this.createBilingualLabel('Enable AI Formatting', '智能笔记格式化'))
+			.setDesc('Auto-add punctuation and break paragraphs for Note content / 为笔记正文自动添加标点并优化段落')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enableAIFormatting)
 				.onChange(async (value) => {
 					this.plugin.settings.enableAIFormatting = value;
 					await this.saveAndNotify();
 					this.display(); // Refresh to show/hide prompt
+				}));
+
+		new Setting(section)
+			.setName(this.createBilingualLabel('Enable AI Subtitles', '智能字幕生成'))
+			.setDesc('Apply AI punctuation and segmentation to generated SRT files / 对生成的字幕文件应用 AI 智能断句和标点')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableAISubtitles)
+				.onChange(async (value) => {
+					this.plugin.settings.enableAISubtitles = value;
+					await this.saveAndNotify();
 				}));
 
 		if (this.plugin.settings.enableAIFormatting) {
