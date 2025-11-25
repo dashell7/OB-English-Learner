@@ -226,6 +226,107 @@ ${texts}
     }
 
     /**
+     * 使用 AI 对字幕进行智能分句和标点，并保留时间戳
+     */
+    async segmentAndPunctuate(lines: TranscriptLine[]): Promise<TranscriptLine[]> {
+        console.log('[LinguaSync] Starting AI segmentation and punctuation...');
+        
+        // Process in batches to fit in context window
+        // A batch of 20 lines is reasonable for stability
+        const batchSize = 20;
+        const resultLines: TranscriptLine[] = [];
+        
+        for (let i = 0; i < lines.length; i += batchSize) {
+            const batch = lines.slice(i, i + batchSize);
+            console.log(`[LinguaSync] Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(lines.length / batchSize)}...`);
+            
+            const batchResult = await this.processSegmentationBatch(batch);
+            resultLines.push(...batchResult);
+            
+            // Avoid rate limits
+            if (i + batchSize < lines.length) {
+                await this.sleep(500);
+            }
+        }
+        
+        console.log('[LinguaSync] ✅ AI segmentation completed!');
+        return resultLines;
+    }
+
+    private async processSegmentationBatch(lines: TranscriptLine[]): Promise<TranscriptLine[]> {
+        const input = lines.map((line, index) => `${index + 1}. ${line.text}`).join('\n');
+        
+        const prompt = `You are a subtitle editor. Your task is to merge split subtitle lines into complete, grammatically correct sentences with proper punctuation.
+
+Rules:
+1. Merge lines to form full sentences.
+2. Add proper punctuation and capitalization.
+3. Do NOT change or skip any words.
+4. Output strictly in this format: "StartID-EndID: Sentence"
+   - StartID: The ID of the first line in this sentence.
+   - EndID: The ID of the last line in this sentence.
+   - If a sentence is just one line, use "ID-ID".
+   
+Input lines:
+${input}
+
+Output format example:
+1-2: Hello, my name is John.
+3-3: How are you?
+4-6: I am doing great today, thanks for asking.
+
+Output:`;
+
+        try {
+            const response = await this.callAI(prompt);
+            return this.parseSegmentationResponse(response, lines);
+        } catch (error) {
+            console.error('[LinguaSync] Segmentation error:', error);
+            // Fallback: return original lines
+            return lines;
+        }
+    }
+
+    private parseSegmentationResponse(response: string, originalLines: TranscriptLine[]): TranscriptLine[] {
+        const newLines: TranscriptLine[] = [];
+        const lines = response.split('\n').filter(l => l.trim());
+        
+        for (const line of lines) {
+            // Parse "StartID-EndID: Text"
+            const match = line.match(/^(\d+)-(\d+):\s*(.+)$/);
+            if (match) {
+                const startIdx = parseInt(match[1]) - 1; // 0-based index
+                const endIdx = parseInt(match[2]) - 1;
+                const text = match[3].trim();
+                
+                // Validate indices
+                if (startIdx >= 0 && endIdx < originalLines.length && startIdx <= endIdx) {
+                    const startLine = originalLines[startIdx];
+                    const endLine = originalLines[endIdx];
+                    
+                    // Calculate combined duration: EndTime of last line - StartTime of first line
+                    const duration = (endLine.start + endLine.duration) - startLine.start;
+                    
+                    newLines.push({
+                        start: startLine.start,
+                        duration: duration,
+                        text: text,
+                        lang: startLine.lang
+                    });
+                }
+            }
+        }
+        
+        // Fallback if parsing failed completely (e.g. AI output garbage)
+        if (newLines.length === 0 && originalLines.length > 0) {
+            // Try to at least return original lines to avoid data loss
+            return originalLines;
+        }
+        
+        return newLines;
+    }
+
+    /**
      * 智能格式化转录文本：添加标点符号和分段
      * @param lines 转录行
      * @param customPrompt 自定义 prompt 模板（可选），使用 {{text}} 作为文本占位符

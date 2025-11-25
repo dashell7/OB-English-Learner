@@ -150,6 +150,28 @@ export default class LinguaSyncPlugin extends Plugin {
 			// Fetch video data with progress updates
 			const videoData = await this.fetchVideoDataWithProgress(url, translatorConfig, progress);
 
+			// Step 4.5: AI Segmentation & Punctuation Refinement (if enabled)
+			if (this.settings.enableAIFormatting && this.settings.aiApiKey && videoData.transcript && videoData.transcript.length > 0 && videoData.transcript[0].lang === 'en') {
+				try {
+					progress.nextStep('AI refining transcript segmentation...');
+					console.log('[LinguaSync] Refining transcript with AI...');
+					
+					const { AITranslator } = await import('./src/translator');
+					const translator = new AITranslator({
+						provider: this.settings.aiProvider,
+						apiKey: this.settings.aiApiKey,
+						model: this.settings.aiModel,
+						baseUrl: this.settings.aiBaseUrl
+					});
+					
+					videoData.transcript = await translator.segmentAndPunctuate(videoData.transcript);
+					console.log(`[LinguaSync] ✅ Transcript refined: ${videoData.transcript.length} lines`);
+				} catch (error) {
+					console.error('[LinguaSync] AI segmentation failed, using original:', error);
+					// Continue with original transcript
+				}
+			}
+
 			// Step 5: Create folders and files
 			progress.nextStep('Creating folders...');
 
