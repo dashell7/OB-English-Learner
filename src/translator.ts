@@ -2,7 +2,7 @@ import { requestUrl } from 'obsidian';
 import { TranscriptLine } from './types';
 
 export interface TranslatorConfig {
-    provider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow';
+    provider: 'openai' | 'deepseek' | 'gemini' | 'siliconflow' | 'custom';
     apiKey: string;
     model?: string;
     baseUrl?: string;
@@ -86,7 +86,7 @@ ${texts}
     private async callAI(prompt: string): Promise<string> {
         const { provider, apiKey, model, baseUrl } = this.config;
 
-        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow') {
+        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'custom') {
             return await this.callOpenAICompatible(prompt, apiKey, model, baseUrl);
         } else if (provider === 'gemini') {
             return await this.callGemini(prompt, apiKey, model);

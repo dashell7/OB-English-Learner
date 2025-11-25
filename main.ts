@@ -632,7 +632,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					})
 				)
 				.settingEl.querySelector('.setting-item-control .setting-item-description')?.remove();
-				// Adjust textarea width
+				
 				const textAreas = section.querySelectorAll('textarea');
 				const lastTextArea = textAreas[textAreas.length - 1];
 				if (lastTextArea) {
@@ -649,16 +649,25 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				.addOption('siliconflow', 'SiliconFlow / 硅基流动')
 				.addOption('openai', 'OpenAI')
 				.addOption('gemini', 'Google Gemini')
+				.addOption('custom', 'Custom / 自定义 (OpenAI Compatible)')
 				.setValue(this.plugin.settings.aiProvider)
 				.onChange(async (value: any) => {
 					this.plugin.settings.aiProvider = value;
-					// Reset model to the first option of the new provider
-					const newModels = models[value] || [];
-					if (newModels.length > 0) {
-						this.plugin.settings.aiModel = newModels[0].id;
+					
+					if (value === 'custom') {
+						// Keep existing values or set defaults
+					} else {
+						// Reset Base URL for standard providers
+						this.plugin.settings.aiBaseUrl = '';
+						// Reset model to the first option of the new provider
+						const newModels = models[value] || [];
+						if (newModels.length > 0) {
+							this.plugin.settings.aiModel = newModels[0].id;
+						}
 					}
+					
 					await this.saveAndNotify();
-					this.display(); // Refresh UI to update model dropdown
+					this.display(); // Refresh UI
 				}));
 
 		new Setting(section)
@@ -672,30 +681,58 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					this.debouncedSave();
 				}));
 
-		new Setting(section)
-			.setName(this.createBilingualLabel('Model', '模型选择'))
-			.setDesc('Select the AI model to use / 选择要使用的模型')
-			.addDropdown(dropdown => {
-				const currentProvider = this.plugin.settings.aiProvider;
-				const availableModels = models[currentProvider] || [];
-				
-				availableModels.forEach(m => dropdown.addOption(m.id, m.name));
-				
-				// Ensure current value is valid
-				if (!availableModels.find(m => m.id === this.plugin.settings.aiModel)) {
-					if (availableModels.length > 0) {
-						this.plugin.settings.aiModel = availableModels[0].id;
-						this.plugin.saveSettings(); // Silent save for correction
-					}
-				}
+		// Base URL (Only for Custom)
+		if (this.plugin.settings.aiProvider === 'custom') {
+			new Setting(section)
+				.setName(this.createBilingualLabel('Base URL', 'API 地址'))
+				.setDesc('Custom API Base URL (e.g. https://api.example.com/v1/chat/completions)')
+				.addText(text => text
+					.setPlaceholder('https://api.openai.com/v1/chat/completions')
+					.setValue(this.plugin.settings.aiBaseUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.aiBaseUrl = value;
+						this.debouncedSave();
+					}));
+		}
 
-				dropdown
+		// Model Selection (Dynamic based on provider)
+		if (this.plugin.settings.aiProvider === 'custom') {
+			new Setting(section)
+				.setName(this.createBilingualLabel('Model Name', '模型名称'))
+				.setDesc('Enter the model ID manually / 手动输入模型 ID')
+				.addText(text => text
+					.setPlaceholder('e.g. gpt-4o-mini')
 					.setValue(this.plugin.settings.aiModel)
 					.onChange(async (value) => {
 						this.plugin.settings.aiModel = value;
-						this.saveAndNotify();
-					});
-			});
+						this.debouncedSave();
+					}));
+		} else {
+			new Setting(section)
+				.setName(this.createBilingualLabel('Model', '模型选择'))
+				.setDesc('Select the AI model to use / 选择要使用的模型')
+				.addDropdown(dropdown => {
+					const currentProvider = this.plugin.settings.aiProvider;
+					const availableModels = models[currentProvider] || [];
+					
+					availableModels.forEach(m => dropdown.addOption(m.id, m.name));
+					
+					// Ensure current value is valid
+					if (!availableModels.find(m => m.id === this.plugin.settings.aiModel)) {
+						if (availableModels.length > 0) {
+							this.plugin.settings.aiModel = availableModels[0].id;
+							this.plugin.saveSettings(); // Silent save for correction
+						}
+					}
+
+					dropdown
+						.setValue(this.plugin.settings.aiModel)
+						.onChange(async (value) => {
+							this.plugin.settings.aiModel = value;
+							this.saveAndNotify();
+						});
+				});
+		}
 		
 		new Setting(section)
 			.setName(this.createBilingualLabel('Test Connection', '测试连接'))
