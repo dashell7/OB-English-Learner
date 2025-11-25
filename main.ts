@@ -62,10 +62,10 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	videoFolder: 'Languages/Videos',
 	assetsFolder: 'Languages/Assets',
 	autoDownloadThumbnails: true,
-	generateBilingualTranscript: false,
+	generateBilingualTranscript: true,
 	// AI Translation & Formatting
-	enableAITranslation: true,
-	enableAIFormatting: true,  // AI punctuation and paragraph formatting
+	enableAITranslation: false,
+	enableAIFormatting: false,  // AI punctuation and paragraph formatting
 	aiFormattingPrompt: DEFAULT_FORMATTING_PROMPT,
 	aiProvider: 'deepseek',
 	aiApiKey: '',
