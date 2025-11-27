@@ -2,6 +2,7 @@ import { requestUrl, App } from 'obsidian';
 import { VideoData, VideoMetadata, TranscriptLine } from './types';
 import { AITranslator, TranslatorConfig } from './translator';
 import { BilibiliScraper } from './bilibili-scraper';
+import { DirectYouTubeTranscript } from './youtube-transcript-direct';
 
 // Type declaration for YTranscript plugin API
 interface YTranscriptAPI {
@@ -16,33 +17,19 @@ interface YTranscriptAPI {
 
 export class YouTubeScraper {
     /**
-     * Get YTranscript plugin API
+     * Get built-in transcript fetcher (no external plugin dependency)
      */
     private static getYTranscriptAPI(): YTranscriptAPI {
-        // @ts-ignore - Access global ytranscript plugin
-        const ytPlugin = window.app?.plugins?.plugins?.ytranscript;
+        console.log('[LinguaSync] ✅ Using built-in transcript fetcher');
         
-        if (!ytPlugin) {
-            throw new Error('YTranscript plugin not found or not loaded. Please install and enable the YTranscript plugin.');
-        }
-        
-        // 1. Try accessing the .api object (standard way if supported)
-        if (ytPlugin.api) {
-            return ytPlugin.api;
-        }
-        
-        // 2. Try accessing getTranscript directly (if exposed on plugin instance)
-        if (typeof ytPlugin.getTranscript === 'function') {
-            console.log('[LinguaSync] Using direct getTranscript method from YTranscript');
-            // Wrap it to match the interface
-            return {
-                getTranscript: async (url: string, options?: { lang?: string }) => {
-                    return await ytPlugin.getTranscript(url, options);
-                }
-            };
-        }
-
-        throw new Error('YTranscript plugin loaded but API not compatible. Please update YTranscript plugin.');
+        return {
+            getTranscript: async (url: string, options?: { lang?: string }) => {
+                const response = await DirectYouTubeTranscript.getTranscript(url, options);
+                return {
+                    lines: response.lines
+                };
+            }
+        };
     }
 
     /**
@@ -139,12 +126,23 @@ export class YouTubeScraper {
         }
 
         const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        console.log('[LinguaSync] Fetching transcript using YTranscript plugin...');
+        console.log('[LinguaSync] Fetching transcript using built-in fetcher...');
         console.log('[LinguaSync] Video URL:', pageUrl);
 
         try {
-            // Extract metadata first
-            const response = await requestUrl({ url: pageUrl });
+            // Extract metadata first with browser-like headers
+            const response = await requestUrl({ 
+                url: pageUrl,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
+                }
+            });
             const metadata = this.extractMetadata(response.text, videoId);
             
             // Strategy: Try to get both English and Chinese transcripts
@@ -405,49 +403,155 @@ export class YouTubeScraper {
      * Extract metadata from YouTube page HTML
      */
     private static extractMetadata(html: string, videoId: string): VideoMetadata {
-        // Extract ytInitialPlayerResponse JSON
-        const match = html.match(/var ytInitialPlayerResponse = ({.+?});/);
+        console.log('[LinguaSync] 🔍 Extracting metadata for video:', videoId);
+        
+        let title = '';
+        let author = 'Unknown Author';
+        let duration = 0;
+        
+        // Strategy 1: Extract from ytInitialPlayerResponse JSON (most reliable)
+        // Try multiple regex patterns for different YouTube HTML variations
+        let playerResponse: any = null;
+        
+        // Pattern 1: Standard format with 'var' (using [\s\S] for multiline compatibility)
+        let match = html.match(/var ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});(?:\s|var|<)/);
         if (!match) {
-            throw new Error('Failed to extract video metadata');
+            // Pattern 2: Without line breaks (older format)
+            const htmlOneLine = html.replace(/\n/g, ' ');
+            match = htmlOneLine.match(/var ytInitialPlayerResponse\s*=\s*(\{[^;]+\});/);
         }
-
-        const playerResponse = JSON.parse(match[1]);
-        const videoDetails = playerResponse.videoDetails;
-
-        // Clean title by removing leading/trailing quotes (ASCII and Unicode quotes)
-        const rawTitle = videoDetails.title || 'Unknown Title';
-        console.log('[LinguaSync] 🔍 DEBUG - Raw title from YouTube:', rawTitle);
-        console.log('[LinguaSync] 🔍 DEBUG - Raw title charCodes:', rawTitle.split('').map((c: string) => c.charCodeAt(0)).join(','));
+        if (!match) {
+            // Pattern 3: Direct assignment without 'var'
+            match = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});(?:\s|var|<)/);
+        }
         
-        // Remove various types of quotes: " ' " " 「 」
-        const cleanTitle = rawTitle.replace(/^["'""「]|["'""」]$/g, '').trim();
-        console.log('[LinguaSync] 🔍 DEBUG - Clean title after removing quotes:', cleanTitle);
+        if (match && match[1]) {
+            try {
+                console.log('[LinguaSync] 🔍 Found playerResponse, JSON length:', match[1].length);
+                playerResponse = JSON.parse(match[1]);
+                console.log('[LinguaSync] ✅ Parsed ytInitialPlayerResponse');
+                
+                const videoDetails = playerResponse?.videoDetails;
+                console.log('[LinguaSync] videoDetails:', videoDetails ? 'EXISTS' : 'MISSING');
+                
+                if (videoDetails) {
+                    if (videoDetails.title) {
+                        title = videoDetails.title;
+                        console.log('[LinguaSync] ✅ Title from videoDetails:', title);
+                    }
+                    if (videoDetails.author) {
+                        author = videoDetails.author;
+                    }
+                    if (videoDetails.lengthSeconds) {
+                        duration = parseInt(videoDetails.lengthSeconds);
+                    }
+                } else {
+                    console.warn('[LinguaSync] ⚠️ videoDetails not found in playerResponse');
+                    console.log('[LinguaSync] playerResponse keys:', Object.keys(playerResponse));
+                    
+                    // Try to extract from playabilityStatus (for restricted videos)
+                    const playability = playerResponse?.playabilityStatus;
+                    if (playability?.errorScreen) {
+                        const errorScreen = playability.errorScreen;
+                        // Try playerErrorMessageRenderer
+                        const errorRenderer = errorScreen.playerErrorMessageRenderer;
+                        if (errorRenderer?.reason?.simpleText) {
+                            console.log('[LinguaSync] Found playability error:', errorRenderer.reason.simpleText);
+                        }
+                    }
+                    
+                    // Try to extract from microformat (backup location)
+                    const microformat = playerResponse?.microformat?.playerMicroformatRenderer;
+                    if (microformat) {
+                        if (microformat.title?.simpleText) {
+                            title = microformat.title.simpleText;
+                            console.log('[LinguaSync] ✅ Title from microformat:', title);
+                        }
+                        if (microformat.ownerChannelName) {
+                            author = microformat.ownerChannelName;
+                        }
+                        if (microformat.lengthSeconds) {
+                            duration = parseInt(microformat.lengthSeconds);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('[LinguaSync] ⚠️ Failed to parse ytInitialPlayerResponse:', error);
+                console.log('[LinguaSync] JSON snippet (first 500 chars):', match[1].substring(0, 500));
+            }
+        } else {
+            console.warn('[LinguaSync] ⚠️ ytInitialPlayerResponse not found in HTML');
+        }
         
-        return {
-            videoId,
-            title: cleanTitle,
-            author: videoDetails.author || 'Unknown Author',
-            channel: videoDetails.author || 'Unknown Channel',
-            duration: parseInt(videoDetails.lengthSeconds) || 0,
-            thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-            uploadDate: new Date().toISOString().split('T')[0]
-        };
-    }
-
-
-    // No longer needed - using YTranscript plugin
-
-    /**
-     * Decode HTML entities in transcript text
-     */
-    private static decodeHtmlEntities(text: string): string {
-        return text
+        // Strategy 2: Extract from <title> tag (fallback)
+        if (!title) {
+            const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+            if (titleMatch) {
+                // YouTube title format: "Video Title - YouTube"
+                let extractedTitle = titleMatch[1].replace(/\s*-\s*YouTube\s*$/, '').trim();
+                // Only use if we actually got a meaningful title
+                if (extractedTitle && extractedTitle.length > 0) {
+                    title = extractedTitle;
+                    console.log('[LinguaSync] ✅ Title from <title> tag:', title);
+                } else {
+                    console.log('[LinguaSync] ⚠️ <title> tag exists but contains no meaningful title');
+                }
+            }
+        }
+        
+        // Strategy 3: Extract from og:title meta tag (fallback)
+        if (!title) {
+            const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+            if (ogTitleMatch) {
+                title = ogTitleMatch[1];
+                console.log('[LinguaSync] ✅ Title from og:title:', title);
+            }
+        }
+        
+        // Strategy 4: Extract from twitter:title meta tag (fallback)
+        if (!title) {
+            const twitterTitleMatch = html.match(/<meta\s+name=["']twitter:title["']\s+content=["']([^"']+)["']/i);
+            if (twitterTitleMatch) {
+                title = twitterTitleMatch[1];
+                console.log('[LinguaSync] ✅ Title from twitter:title:', title);
+            }
+        }
+        
+        // Strategy 5: Extract from name="title" meta tag (fallback)
+        if (!title) {
+            const metaTitleMatch = html.match(/<meta\s+name=["']title["']\s+content=["']([^"']+)["']/i);
+            if (metaTitleMatch) {
+                title = metaTitleMatch[1];
+                console.log('[LinguaSync] ✅ Title from meta name="title":', title);
+            }
+        }
+        
+        // Last resort fallback
+        if (!title) {
+            title = `Video ${videoId}`;
+            console.warn('[LinguaSync] ⚠️ No title found, using fallback:', title);
+        }
+        
+        // Clean title by removing leading/trailing quotes and HTML entities
+        title = title
+            .replace(/^["'""「]|["'""」]$/g, '')
+            .replace(/&quot;/g, '"')
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'")
-            .replace(/\n/g, ' ')
             .trim();
+        
+        console.log('[LinguaSync] 📝 Final metadata - Title:', title, '| Author:', author);
+        
+        return {
+            videoId,
+            title,
+            author,
+            channel: author,
+            duration,
+            thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+            uploadDate: new Date().toISOString().split('T')[0]
+        };
     }
 }

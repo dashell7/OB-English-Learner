@@ -1,7 +1,7 @@
 {
-	"id": "obsidian-lingua-sync",
+	"id": "ob-english-learner",
 	"name": "OB English Learner",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "YouTube language learning system with automatic transcript fetching, SRT generation, and Bases integration.",
 	"author": "Your Name",

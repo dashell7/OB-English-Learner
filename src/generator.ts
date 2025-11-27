@@ -15,25 +15,17 @@ export class NoteGenerator {
         const { metadata, transcript, translatedTranscript } = videoData;
 
         // 1. Determine Note and Folder Paths
-        // Default assumption based on title
-        const defaultFileName = this.sanitizeFileName(metadata.title);
-        let fileName = defaultFileName;
-        let videoFolder = normalizePath(`${this.settings.videoFolder}/${fileName}`);
-        let notePath = normalizePath(`${this.settings.videoFolder}/${fileName}.md`);
+        const fileName = this.sanitizeFileName(metadata.title);
+        const notePath = normalizePath(`${this.settings.videoFolder}/${fileName}.md`);
         
-        // If update mode, try to find the actual existing note to respect user renames/moves
+        // If update mode, try to find the actual existing note
         let existingNote = this.app.vault.getAbstractFileByPath(notePath);
         
         if (isUpdate && !existingNote) {
-             // Fallback: Search by content (URL) is expensive, so we try to search by name similarity or just assume default.
-             // Since main.ts already found the note to set isUpdate=true, we assume it exists.
-             // Let's check if we can find it by URL if default path failed.
              const files = this.app.vault.getMarkdownFiles();
              for (const file of files) {
                  if (!file.path.startsWith(this.settings.videoFolder)) continue;
-                 // Optimization: Only check files that look related or check all if needed
-                 // Here we just check all in video folder for robustness
-                 if (file.basename === fileName) { // Should have been found by getAbstractFileByPath, but just in case
+                 if (file.basename === fileName) {
                      existingNote = file;
                      break;
                  }
@@ -41,37 +33,41 @@ export class NoteGenerator {
         }
 
         if (existingNote instanceof TFile) {
-            // Use existing file's structure
-            fileName = existingNote.basename;
-            videoFolder = existingNote.parent ? existingNote.parent.path : this.settings.videoFolder;
-            notePath = existingNote.path;
             console.log('[OB English Learner] 🔄 Update mode: Targeting existing note at', notePath);
         } else {
-            console.log('[OB English Learner] 📥 Creating new note structure...');
+            console.log('[OB English Learner] 📥 Creating new note...');
         }
 
-        // Ensure folders exist
-        const subtitlesFolder = normalizePath(`${videoFolder}/Subtitles`);
-        await this.ensureFolderExists(videoFolder);
-        await this.ensureFolderExists(subtitlesFolder);
+        // Ensure all folders exist (independent directories)
+        await this.ensureFolderExists(this.settings.videoFolder);
+        await this.ensureFolderExists(this.settings.subtitlesFolder);
+        await this.ensureFolderExists(this.settings.thumbnailsFolder);
 
-        // 2. Check/Create Thumbnail
+        // 2. Check/Create Thumbnail (in independent thumbnails folder)
         let coverPath = '';
+        console.log('[OB English Learner] 🔍 autoDownloadThumbnails:', this.settings.autoDownloadThumbnails);
+        
         if (this.settings.autoDownloadThumbnails) {
             const imgName = `${fileName}.jpg`;
-            const imgPath = normalizePath(`${videoFolder}/${imgName}`);
+            const imgPath = normalizePath(`${this.settings.thumbnailsFolder}/${imgName}`);
+            
+            console.log('[OB English Learner] 🔍 Checking for existing cover at:', imgPath);
             
             // Check if cover exists
             if (this.app.vault.getAbstractFileByPath(imgPath)) {
-                 console.log('[OB English Learner] ✅ Cover already exists, reusing:', imgName);
-                 coverPath = imgName;
+                 console.log('[OB English Learner] ✅ Cover already exists, reusing:', imgPath);
+                 coverPath = imgPath;
             } else {
-                 console.log('[OB English Learner] 📥 Downloading missing cover...');
-                 coverPath = await this.downloadThumbnail(metadata.thumbnailUrl, fileName, videoFolder);
+                 console.log('[OB English Learner] 📥 Cover not found, downloading...');
+                 console.log('[OB English Learner] 📥 Thumbnail URL:', metadata.thumbnailUrl);
+                 coverPath = await this.downloadThumbnail(metadata.thumbnailUrl, fileName);
+                 console.log('[OB English Learner] 📥 Download result:', coverPath);
             }
+        } else {
+            console.log('[OB English Learner] ⚠️ Auto-download thumbnails is disabled');
         }
 
-        // 3. Check/Create SRTs
+        // 3. Check/Create SRTs (in independent subtitles folder)
         // Determine which transcript to use for SRT files
         // Use refined if available AND enableAISubtitles is true
         const useRefinedForSRT = this.settings.enableAISubtitles && videoData.refinedTranscript;
@@ -79,7 +75,7 @@ export class NoteGenerator {
         const srtTranslated = useRefinedForSRT ? videoData.refinedTranslatedTranscript : videoData.translatedTranscript;
 
         // This ensures missing files are regenerated, but existing ones are preserved
-        const srtPaths = await this.ensureSRTFiles(srtTranscript, srtTranslated, fileName, subtitlesFolder);
+        const srtPaths = await this.ensureSRTFiles(srtTranscript, srtTranslated, fileName);
 
         // Determine which transcript to use for NOTE content
         // Use refined if available AND enableAIFormatting is true
@@ -148,16 +144,16 @@ export class NoteGenerator {
         // Get template from settings
         const template = this.settings.noteTemplate || this.getDefaultTemplate();
         
-        // Build SRT links (relative to note location)
+        // Build SRT links (using absolute paths to subtitles folder)
         const srtLinksArr = [];
         if (srtPaths.english) {
-            srtLinksArr.push(`- English: [[${fileName}/Subtitles/${srtPaths.english}]]`);
+            srtLinksArr.push(`- English: [[${this.settings.subtitlesFolder}/${srtPaths.english}]]`);
         }
         if (srtPaths.chinese) {
-            srtLinksArr.push(`- 中文: [[${fileName}/Subtitles/${srtPaths.chinese}]]`);
+            srtLinksArr.push(`- 中文: [[${this.settings.subtitlesFolder}/${srtPaths.chinese}]]`);
         }
         if (srtPaths.bilingual) {
-            srtLinksArr.push(`- EN-ZH: [[${fileName}/Subtitles/${srtPaths.bilingual}]]`);
+            srtLinksArr.push(`- EN-ZH: [[${this.settings.subtitlesFolder}/${srtPaths.bilingual}]]`);
         }
         const srtLinks = srtLinksArr.join('\n');
         
@@ -195,18 +191,21 @@ export class NoteGenerator {
         // Format dates
         const today = new Date().toISOString().split('T')[0];
         
-        // Prepare cover - use wikilink format for frontmatter
-        // In frontmatter, Obsidian expects: cover: "[[path/file.jpg]]"
-        console.log('[OB English Learner] 🔍 DEBUG - coverPath before wikilink:', coverPath);
-        const coverLink = coverPath ? `[[${coverPath}]]` : '';
-        console.log('[OB English Learner] 🔍 DEBUG - coverLink after wikilink:', coverLink);
+        // Prepare cover - just use the path, Obsidian will handle it
+        // For frontmatter cover property, use plain path without wikilink brackets
+        console.log('[OB English Learner] 🔍 DEBUG - coverPath:', coverPath);
+        const coverLink = coverPath || '';
 
+        // Escape title for YAML (handle special characters like colons)
+        const escapedTitle = this.escapeYAMLString(metadata.title);
+        const escapedChannel = this.escapeYAMLString(metadata.channel);
+        
         // Replace template variables
         let content = template
-            .replace(/{{title}}/g, metadata.title)
+            .replace(/{{title}}/g, escapedTitle)
             .replace(/{{videoId}}/g, metadata.videoId)
             .replace(/{{url}}/g, metadata.url || `https://youtu.be/${metadata.videoId}`)
-            .replace(/{{channel}}/g, metadata.channel)
+            .replace(/{{channel}}/g, escapedChannel)
             .replace(/{{duration}}/g, this.formatDuration(metadata.duration))
             .replace(/{{uploadDate}}/g, metadata.uploadDate || '')
             .replace(/{{date}}/g, today)
@@ -264,9 +263,9 @@ langr-origin: {{channel}} - YouTube
     private async ensureSRTFiles(
         primaryTranscript: any[], 
         translatedTranscript: any[] | undefined, 
-        fileName: string,
-        subtitlesFolder: string
+        fileName: string
     ): Promise<any> {
+        const subtitlesFolder = this.settings.subtitlesFolder;
         const result: any = {};
         
         // Detect primary transcript language
@@ -345,33 +344,52 @@ langr-origin: {{channel}} - YouTube
     }
 
     /**
-     * Download and save thumbnail image to video folder
+     * Download and save thumbnail image to thumbnails folder
+     * Tries multiple resolutions if higher quality fails
      */
-    private async downloadThumbnail(url: string, fileName: string, videoFolder: string): Promise<string> {
-        try {
-            console.log('[OB English Learner] 🔍 DEBUG - downloadThumbnail fileName param:', fileName);
-            const imageFileName = `${fileName}.jpg`;
-            console.log('[OB English Learner] 🔍 DEBUG - downloadThumbnail imageFileName:', imageFileName);
-            const imagePath = normalizePath(`${videoFolder}/${imageFileName}`);
+    private async downloadThumbnail(url: string, fileName: string): Promise<string> {
+        const imageFileName = `${fileName}.jpg`;
+        const imagePath = normalizePath(`${this.settings.thumbnailsFolder}/${imageFileName}`);
 
-            // Check if thumbnail already exists
-            const existingThumbnail = this.app.vault.getAbstractFileByPath(imagePath);
-            if (existingThumbnail) {
-                console.log('[OB English Learner] Thumbnail already exists, using existing file');
-                console.log('[OB English Learner] 🔍 DEBUG - Returning existing imageFileName:', imageFileName);
-                return imageFileName; // Return just filename for wikilink
-            }
-
-            const response = await requestUrl({ url });
-            // Save as binary
-            await this.app.vault.createBinary(imagePath, response.arrayBuffer);
-
-            console.log('[OB English Learner] 🔍 DEBUG - Returning new imageFileName:', imageFileName);
-            return imageFileName; // Return just filename for wikilink
-        } catch (e) {
-            console.error('Failed to download thumbnail:', e);
-            return '';
+        // Check if thumbnail already exists
+        const existingThumbnail = this.app.vault.getAbstractFileByPath(imagePath);
+        if (existingThumbnail) {
+            console.log('[OB English Learner] ✅ Thumbnail already exists:', imagePath);
+            return imagePath;
         }
+
+        // Try multiple thumbnail qualities (YouTube specific)
+        // maxresdefault (1920x1080) -> sddefault (640x480) -> hqdefault (480x360) -> mqdefault (320x180) -> default (120x90)
+        const urlVariants = [
+            url, // Original URL (usually maxresdefault)
+            url.replace('maxresdefault', 'sddefault'),
+            url.replace('maxresdefault', 'hqdefault'),
+            url.replace('maxresdefault', 'mqdefault'),
+            url.replace('maxresdefault', 'default')
+        ];
+
+        console.log('[OB English Learner] 📥 Attempting to download thumbnail...');
+        
+        for (let i = 0; i < urlVariants.length; i++) {
+            const tryUrl = urlVariants[i];
+            try {
+                console.log(`[OB English Learner] 📥 Trying quality ${i + 1}/${urlVariants.length}: ${tryUrl}`);
+                const response = await requestUrl({ url: tryUrl });
+                
+                // Save as binary
+                await this.app.vault.createBinary(imagePath, response.arrayBuffer);
+                console.log('[OB English Learner] ✅ Thumbnail saved successfully:', imagePath);
+                return imagePath;
+            } catch (e) {
+                console.log(`[OB English Learner] ⚠️ Quality ${i + 1} failed (${e.message}), trying next...`);
+                // Continue to next quality
+            }
+        }
+
+        // All attempts failed
+        console.error('[OB English Learner] ❌ Failed to download thumbnail at any quality');
+        console.error('[OB English Learner] ❌ Original URL was:', url);
+        return '';
     }
 
     /**
@@ -383,6 +401,28 @@ langr-origin: {{channel}} - YouTube
             await this.app.vault.createFolder(folderPath);
             console.log('[OB English Learner] Created folder:', folderPath);
         }
+    }
+
+    /**
+     * Escape string for YAML frontmatter
+     * Handles special characters like colons, quotes, etc.
+     */
+    private escapeYAMLString(str: string): string {
+        if (!str) return '""';
+        
+        // Check if string needs quoting (contains special YAML characters)
+        const needsQuoting = /[:\[\]{}&*#?|\-<>=!%@`]/.test(str) || 
+                            str.startsWith(' ') || 
+                            str.endsWith(' ') ||
+                            str.includes('"') ||
+                            str.includes("'");
+        
+        if (needsQuoting) {
+            // Use double quotes and escape any internal double quotes
+            return `"${str.replace(/"/g, '\\"')}"`;
+        }
+        
+        return str;
     }
 
     /**

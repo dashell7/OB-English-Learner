@@ -161,7 +161,7 @@ export class ProgressNotice {
      * Update the display
      */
     private updateDisplay(message: string) {
-        const percentage = Math.round((this.currentStep / this.totalSteps) * 100);
+        const percentage = Math.min(100, Math.round((this.currentStep / this.totalSteps) * 100));
         
         this.messageEl.textContent = message;
         this.percentageEl.textContent = `${percentage}%`;

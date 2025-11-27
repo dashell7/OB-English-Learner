@@ -30,7 +30,9 @@ export interface LinguaSyncSettings {
     defaultLanguage: string;
     targetLanguage: string;
     videoFolder: string;
-    assetsFolder: string;
+    assetsFolder: string;  // 已废弃，保留用于兼容
+    subtitlesFolder: string;  // 新增：字幕文件夹
+    thumbnailsFolder: string;  // 新增：封面图片文件夹
     autoDownloadThumbnails: boolean;
     generateBilingualTranscript: boolean;
     // AI Translation

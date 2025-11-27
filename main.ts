@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, TFile, AbstractInputSuggest, TFolder, debounce } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, TFile, AbstractInputSuggest, TFolder, debounce, requestUrl } from 'obsidian';
 import { YouTubeScraper } from './src/scraper';
 import { NoteGenerator } from './src/generator';
 import { BasesIntegration } from './src/bases';
@@ -7,22 +7,14 @@ import { ProgressNotice } from './src/progress-notice';
 import { PasswordManagerModal } from './src/password-manager';
 
 const DEFAULT_TEMPLATE = `---
-title: "{{title}}"
-langr: {{title}}
+title: {{title}}
 date: {{date}}
-cefr: B2
 cover: {{cover}}
-channel: "{{channel}}"
 url: {{url}}
-duration: {{duration}}
-type: video-note
-status: inbox
-tags:
-  - english/video
----
-
-langr-audio: {{url}}
+langr-audio: 
 langr-origin: {{channel}} - YouTube
+langr: xxx
+---
 
 ^^^article
 
@@ -30,19 +22,7 @@ langr-origin: {{channel}} - YouTube
 
 ^^^words
 
-^^^notes
-
----
-
-## 视频信息
-
-**频道**: {{channel}}  
-**时长**: {{duration}}  
-**日期**: {{uploadDate}}
-
-## 字幕文件
-
-{{srtLinks}}`;
+^^^notes`;
 
 const DEFAULT_FORMATTING_PROMPT = `Please format the following transcript text. You MUST follow these rules:
 1. ADD PUNCTUATION: Insert periods, commas, question marks, etc. where appropriate.
@@ -60,7 +40,9 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	defaultLanguage: 'en',
 	targetLanguage: 'zh',
 	videoFolder: 'Languages/Videos',
-	assetsFolder: 'Languages/Assets',
+	assetsFolder: 'Languages/Assets',  // 已废弃，保留用于兼容
+	subtitlesFolder: 'Languages/Subtitles',  // 新增：字幕文件夹
+	thumbnailsFolder: 'Languages/Thumbnails',  // 新增：封面图片文件夹
 	autoDownloadThumbnails: true,
 	generateBilingualTranscript: true,
 	// AI Translation & Formatting
@@ -108,6 +90,62 @@ export default class LinguaSyncPlugin extends Plugin {
 			name: 'Initialize Knowledge Base',
 			callback: async () => {
 				await this.initializeKnowledgeBase();
+			}
+		});
+
+		// Debug: Test metadata extraction
+		this.addCommand({
+			id: 'debug-test-metadata',
+			name: '[DEBUG] Test Metadata Extraction',
+			callback: () => {
+				new YouTubeInputModal(this.app, async (url) => {
+					try {
+						new Notice('Testing metadata extraction...');
+						console.log('\n═══════════════════════════════════════');
+						console.log('[DEBUG] Testing metadata extraction for:', url);
+						console.log('═══════════════════════════════════════\n');
+						
+						const { YouTubeScraper } = await import('./src/scraper');
+						const videoId = YouTubeScraper.extractVideoId(url);
+						console.log('[DEBUG] Video ID:', videoId);
+						
+						if (!videoId) {
+							new Notice('Invalid YouTube URL');
+							return;
+						}
+						
+						const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+						const response = await requestUrl({ 
+							url: pageUrl,
+							headers: {
+								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+								'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+								'Accept-Language': 'en-US,en;q=0.9',
+								'Accept-Encoding': 'gzip, deflate, br',
+								'DNT': '1',
+								'Connection': 'keep-alive',
+								'Upgrade-Insecure-Requests': '1'
+							}
+						});
+						console.log('[DEBUG] HTML fetched, length:', response.text.length);
+						
+						// Actually call extractMetadata to see detailed logs
+						console.log('\n--- Calling extractMetadata() ---\n');
+						// @ts-ignore - accessing private method for testing
+						const metadata = YouTubeScraper['extractMetadata'](response.text, videoId);
+						
+						console.log('\n--- Result ---');
+						console.log('Title:', metadata.title);
+						console.log('Author:', metadata.author);
+						console.log('Duration:', metadata.duration);
+						console.log('═══════════════════════════════════════\n');
+						
+						new Notice(`Title: ${metadata.title}`);
+					} catch (error) {
+						console.error('[DEBUG] Test failed:', error);
+						new Notice(`Test failed: ${error.message}`);
+					}
+				}).open();
 			}
 		});
 
@@ -564,8 +602,8 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		section.createEl('div', { text: 'Video & Assets / 视频与资源', cls: 'ls-section-title' });
 
 		new Setting(section)
-			.setName(this.createBilingualLabel('Video Folder', '视频保存目录'))
-			.setDesc('Folder where video notes will be saved / 视频笔记存放文件夹')
+			.setName(this.createBilingualLabel('Video Notes Folder', '视频笔记目录'))
+			.setDesc('Folder where video notes (MD files) will be saved / 视频笔记文件（.md）存放目录')
 			.addText(text => {
 				text
 					.setPlaceholder('Languages/Videos')
@@ -578,14 +616,28 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(section)
-			.setName(this.createBilingualLabel('Assets Folder', '资源保存目录'))
-			.setDesc('Folder for SRT files and thumbnails / SRT字幕和封面图存放文件夹')
+			.setName(this.createBilingualLabel('Subtitles Folder', '字幕文件目录'))
+			.setDesc('Folder where SRT subtitle files will be saved / SRT 字幕文件存放目录')
 			.addText(text => {
 				text
-					.setPlaceholder('Languages/Assets')
-					.setValue(this.plugin.settings.assetsFolder)
+					.setPlaceholder('Languages/Subtitles')
+					.setValue(this.plugin.settings.subtitlesFolder)
 					.onChange(async (value) => {
-						this.plugin.settings.assetsFolder = value;
+						this.plugin.settings.subtitlesFolder = value;
+						this.debouncedSave();
+					});
+				new FolderSuggest(this.app, text.inputEl);
+			});
+
+		new Setting(section)
+			.setName(this.createBilingualLabel('Thumbnails Folder', '封面图片目录'))
+			.setDesc('Folder where video thumbnails will be saved / 视频封面图片存放目录')
+			.addText(text => {
+				text
+					.setPlaceholder('Languages/Thumbnails')
+					.setValue(this.plugin.settings.thumbnailsFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.thumbnailsFolder = value;
 						this.debouncedSave();
 					});
 				new FolderSuggest(this.app, text.inputEl);
