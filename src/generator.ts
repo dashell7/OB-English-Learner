@@ -411,7 +411,9 @@ langr-origin: {{channel}} - YouTube
         if (!str) return '""';
         
         // Check if string needs quoting (contains special YAML characters)
-        const needsQuoting = /[:\[\]{}&*#?|\-<>=!%@`]/.test(str) || 
+        // Removed '-' from regex as it's safe inside strings (unless at start)
+        const needsQuoting = /[:\[\]{}&*#?|>=!%@`]/.test(str) || 
+                            str.startsWith('- ') ||
                             str.startsWith(' ') || 
                             str.endsWith(' ') ||
                             str.includes('"') ||

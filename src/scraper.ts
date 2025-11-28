@@ -541,6 +541,16 @@ export class YouTubeScraper {
             .replace(/&gt;/g, '>')
             .replace(/&#39;/g, "'")
             .trim();
+
+        // Clean author as well
+        author = author
+            .replace(/^["'""「]|["'""」]$/g, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&#39;/g, "'")
+            .trim();
         
         console.log('[LinguaSync] 📝 Final metadata - Title:', title, '| Author:', author);
         

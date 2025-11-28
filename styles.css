@@ -1,8 +1,814 @@
 /*
-
 This CSS file will be included with your plugin, and
 available in the app when your plugin is enabled.
 
 If your plugin does not need CSS, delete this file.
-
 */
+
+/* Voice2Text Styles - Refined */
+.recording-modal {
+  background-color: var(--background-primary);
+  border-radius: 16px;
+  padding: 15px 20px;
+  text-align: center;
+  max-width: 320px; /* Smaller width */
+  width: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--background-modifier-border);
+  /* Enable positioning for JS dragging */
+  position: relative;
+  margin: 0 auto; 
+}
+
+/* Remove default Obsidian modal overlay background if possible or style it */
+/* Actually we can't easily remove the modal-bg from here without global side effects 
+   unless we add a specific class to the modal container in JS.
+*/
+
+.voice2text-modal-container {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Draggable Handle */
+.voice2text-drag-handle {
+  width: 40px;
+  height: 4px;
+  background-color: var(--text-muted);
+  border-radius: 2px;
+  margin-bottom: 8px;
+  cursor: grab;
+  opacity: 0.5;
+}
+.voice2text-drag-handle:active {
+  cursor: grabbing;
+  opacity: 0.8;
+}
+
+.voice2text-waveform-container {
+  width: 100%;
+  max-width: 280px;
+  height: 60px; /* Smaller height */
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.voice2text-waveform {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.voice2text-timer {
+  font-size: 20px; /* Smaller font */
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+  margin: 5px 0;
+  letter-spacing: 1px;
+}
+
+.voice2text-controls {
+  display: flex;
+  gap: 16px; /* Tighter gap */
+  margin-top: 5px;
+}
+
+.voice2text-button {
+  width: 42px; /* Smaller buttons */
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.voice2text-button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5px;
+}
+
+.voice2text-button:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+
+.voice2text-button:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.voice2text-transcription {
+  width: 100%;
+  max-width: 500px;
+  margin-top: 20px;
+  padding: 15px;
+  background-color: var(--background-secondary);
+  border-radius: 8px;
+  display: none;
+}
+
+.voice2text-typing-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-normal);
+}
+
+.voice2text-typing-text span {
+  display: inline-block;
+  opacity: 0;
+  animation: fadeIn 0.1s forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.voice2text-transcribing {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.voice2text-transcribing-text {
+  color: var(--text-muted);
+}
+
+.voice2text-transcribing-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.voice2text-transcribing-dots span {
+  animation: dotAnimation 1.4s infinite;
+  opacity: 0;
+}
+
+.voice2text-transcribing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.voice2text-transcribing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotAnimation {
+  0%, 20% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ========================================
+   Settings Panel - Progressive UI Optimization
+   ======================================== */
+
+/* Fix dropdown width in settings */
+.setting-item-control select {
+  min-width: 200px !important;
+  max-width: 100%;
+  width: auto !important;
+}
+
+/* Ensure dropdown text is not truncated */
+.setting-item-control select option {
+  padding: 4px 8px;
+}
+
+/* === Inline Bilingual Labels === */
+.ls-setting-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.ls-setting-en {
+  font-weight: 500;
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.ls-setting-cn {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* === Header Styles === */
+.ls-header {
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 20px;
+}
+
+.ls-title {
+  margin: 0 0 6px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.ls-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* === Tab Navigation === */
+.ls-tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 0;
+}
+
+.ls-tab-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.ls-tab-item:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+.ls-tab-item.is-active {
+  color: var(--interactive-accent);
+  border-bottom-color: var(--interactive-accent);
+}
+
+/* === Content Container === */
+.ls-tab-content {
+  padding: 0;
+}
+
+/* === Section Styles === */
+.ls-section {
+  margin-bottom: 32px;
+}
+
+.ls-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ls-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin: 24px 0 12px 0;
+}
+
+/* === Card-style Grouping === */
+.ls-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ls-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ls-card-icon {
+  font-size: 16px;
+}
+
+/* === Setting Items in Cards === */
+.ls-card .setting-item {
+  border-top: none;
+  padding: 8px 0;
+}
+
+.ls-card .setting-item:first-of-type {
+  padding-top: 0;
+}
+
+.ls-card .setting-item:last-of-type {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* === Status Indicators === */
+.ls-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.ls-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ls-status.configured {
+  color: #059669;
+  background: rgba(5, 150, 105, 0.1);
+}
+
+.ls-status.configured .ls-status-dot {
+  background: #059669;
+}
+
+.ls-status.warning {
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.ls-status.warning .ls-status-dot {
+  background: #F59E0B;
+}
+
+.ls-status.not-set {
+  color: var(--text-muted);
+  background: var(--background-modifier-border);
+}
+
+.ls-status.not-set .ls-status-dot {
+  background: var(--text-muted);
+}
+
+/* === Unified Button Styles === */
+.ls-button,
+button.ls-button {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ls-button:hover {
+  background: var(--interactive-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.ls-button:active {
+  transform: translateY(0);
+}
+
+.ls-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ls-button-secondary {
+  background: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.ls-button-secondary:hover {
+  background: var(--background-modifier-border-hover);
+}
+
+/* === Properties Card === */
+.ls-properties-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.ls-property-row {
+  margin-bottom: 8px;
+}
+
+.ls-property-row:last-child {
+  margin-bottom: 0;
+}
+
+/* === Variables Display === */
+.ls-variables {
+  background: var(--background-secondary);
+  border-left: 3px solid var(--interactive-accent);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+.ls-variables code {
+  background: var(--code-background);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: var(--font-monospace);
+}
+
+/* === Improved Spacing === */
+.setting-item {
+  padding: 16px 0;
+}
+
+.setting-item-info {
+  flex-grow: 1;
+  padding-right: 16px;
+}
+
+.setting-item-name {
+  margin-bottom: 4px;
+}
+
+.setting-item-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* === Form Elements === */
+.setting-item-control input[type="text"],
+.setting-item-control input[type="password"],
+.setting-item-control textarea {
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  padding: 6px 10px;
+  font-size: 13px;
+  transition: border-color 0.2s ease;
+}
+
+.setting-item-control input[type="text"]:focus,
+.setting-item-control input[type="password"]:focus,
+.setting-item-control textarea:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+}
+
+/* === Toggle Switches === */
+.checkbox-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* === Loading State === */
+.ls-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ls-loading::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* === Success/Error Messages === */
+.ls-message {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ls-message-success {
+  background: rgba(5, 150, 105, 0.1);
+  color: #059669;
+  border: 1px solid rgba(5, 150, 105, 0.2);
+}
+
+.ls-message-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.ls-message-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* ========================================
+   Quick Access Bar & Search
+   ======================================== */
+.ls-quick-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ls-search-container {
+  flex: 1;
+  max-width: 400px;
+}
+
+.ls-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ls-search-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+}
+
+.ls-quick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ls-quick-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ls-quick-btn:hover {
+  background: var(--interactive-hover);
+  transform: translateY(-1px);
+}
+
+/* ========================================
+   Setup Wizard Modal
+   ======================================== */
+.ls-wizard-modal {
+  padding: 24px;
+  min-width: 500px;
+  max-width: 600px;
+}
+
+.ls-wizard-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.ls-wizard-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.ls-wizard-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.ls-wizard-progress {
+  height: 4px;
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+
+.ls-wizard-progress-bar {
+  height: 100%;
+  background: var(--interactive-accent);
+  transition: width 0.3s ease;
+}
+
+.ls-wizard-content {
+  margin-bottom: 32px;
+  min-height: 250px;
+}
+
+.ls-wizard-content h3 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ls-wizard-content p {
+  margin: 0 0 16px 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.ls-wizard-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.ls-wizard-content ul li {
+  padding: 8px 0 8px 32px;
+  position: relative;
+}
+
+.ls-wizard-content ul li::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+.ls-wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.ls-wizard-btn {
+  padding: 10px 24px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ls-wizard-btn:hover {
+  background: var(--interactive-hover);
+  transform: translateY(-1px);
+}
+
+.ls-wizard-btn-primary {
+  background: var(--interactive-accent);
+  color: white;
+  border-color: var(--interactive-accent);
+}
+
+.ls-wizard-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.ls-wizard-tips {
+  background: var(--background-secondary);
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.ls-wizard-tips h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ls-wizard-section {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ls-wizard-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+/* ========================================
+   Presets Modal
+   ======================================== */
+.ls-presets-modal {
+  padding: 24px;
+  min-width: 600px;
+  max-width: 700px;
+}
+
+.ls-presets-modal h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.ls-presets-modal > p {
+  margin: 0 0 24px 0;
+  color: var(--text-muted);
+}
+
+.ls-preset-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.ls-preset-card:hover {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ls-preset-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ls-preset-card p {
+  margin: 0 0 16px 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.ls-preset-btn {
+  padding: 10px 24px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 6px;
+  background: var(--interactive-accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ls-preset-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}

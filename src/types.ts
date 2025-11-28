@@ -27,6 +27,9 @@ export interface VideoData {
 }
 
 export interface LinguaSyncSettings {
+    // Setup
+    hasCompletedSetup: boolean;
+    // General
     defaultLanguage: string;
     targetLanguage: string;
     videoFolder: string;
@@ -44,6 +47,33 @@ export interface LinguaSyncSettings {
     aiApiKey: string;
     aiModel: string;
     aiBaseUrl: string;
+    // Voice to Text
+    enableVoice2Text: boolean;
+    sttProvider: 'openai' | 'azure' | 'assemblyai' | 'custom';
+    sttApiKey: string;
+    sttLanguage: string;
+    sttModel: string;
+    sttBaseUrl: string;
+    saveAudio: boolean;
+    audioFolder: string;
+    audioFormat: 'wav' | 'webm' | 'mp3';
+    audioFilenameTemplate: string;
+    // Text to Speech
+    enableTTS: boolean;
+    ttsProvider: 'openai' | 'azure' | 'elevenlabs' | 'gemini' | 'custom';
+    ttsApiKey: string;
+    ttsModel: string;
+    ttsVoice: string;
+    ttsSpeed: number;
+    ttsBaseUrl: string; // For Custom or Azure Region
+    ttsOutputFormat: string; // Azure Output Format
+    // TTS Advanced
+    ttsShowPlayer: 'always' | 'auto' | 'never';
+    ttsAutoscroll: boolean;
+    ttsCacheType: 'local' | 'vault';
+    ttsCacheDuration: number; // hours
+    ttsAudioFolder: string;
+    ttsChunking: 'sentence' | 'paragraph';
     // Template
     noteTemplate: string;
     // Account / Credentials
