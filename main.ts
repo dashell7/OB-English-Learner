@@ -1848,11 +1848,18 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         .setDesc('The Azure voice to use for speech synthesis');
                     
                     voiceSetting.addDropdown(dropdown => {
-                        dropdown.addOption('', 'Loading voices...');
+                        dropdown.addOption('', 'Loading voices... / 加载中...');
                         dropdown.setDisabled(true);
                         
                         // Auto-load voices
                         this.plugin.ttsManager.getAzureVoices().then((voices: any[]) => {
+                            if (!voices || voices.length === 0) {
+                                dropdown.selectEl.innerHTML = '';
+                                dropdown.addOption('', '❌ No voices found / 未找到语音');
+                                dropdown.setDisabled(true);
+                                return;
+                            }
+                            
                             voices.sort((a: any, b: any) => a.Locale.localeCompare(b.Locale) || a.DisplayName.localeCompare(b.DisplayName));
                             
                             const selectEl = dropdown.selectEl;
@@ -1882,15 +1889,30 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                             });
                         }).catch((err: any) => {
                             dropdown.selectEl.innerHTML = '';
-                            dropdown.addOption('', 'Failed to load voices');
+                            const errorMsg = err.message || err.toString();
+                            
+                            // Provide helpful error messages
+                            let displayMsg = '❌ Failed to load voices / 加载失败';
+                            if (errorMsg.includes('401') || errorMsg.includes('403')) {
+                                displayMsg = '❌ Invalid API Key / API密钥无效';
+                            } else if (errorMsg.includes('404')) {
+                                displayMsg = '❌ Invalid Region / 区域无效';
+                            }
+                            
+                            dropdown.addOption('', displayMsg);
                             dropdown.setDisabled(true);
-                            console.error('Failed to load Azure voices:', err);
+                            console.error('[Azure TTS] Failed to load voices:', err);
+                            console.error('[Azure TTS] API Key (first 8 chars):', apiKey.substring(0, 8) + '...');
+                            console.error('[Azure TTS] Region:', region);
+                            
+                            // Show notice to user
+                            new Notice(`${displayMsg}\nCheck console for details / 详见控制台`, 5000);
                         });
                     });
                 } else {
                     new Setting(section)
                         .setName(this.createBilingualLabel('Voice', '语音'))
-                        .setDesc('Enter your API key and select a region to load available voices.');
+                        .setDesc('⚠️ Enter your Azure API Key above to load available voices / 请先在上方输入 Azure API 密钥');
                 }
 
                 // Azure Output Format
@@ -2330,22 +2352,59 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		const notice = new Notice('🔄 Testing connection... / 正在测试连接...', 0);
 		
 		try {
-			// Construct a minimal request to check validity
+			// Determine the correct URL for each provider (same logic as translator.ts)
+			let finalUrl = 'https://api.openai.com/v1/chat/completions';
+			
+			if (aiProvider === 'custom') {
+				finalUrl = aiBaseUrl || finalUrl;
+			} else if (aiProvider === 'deepseek') {
+				finalUrl = 'https://api.deepseek.com/v1/chat/completions';
+			} else if (aiProvider === 'siliconflow') {
+				finalUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+			} else if (aiProvider === 'videocaptioner') {
+				finalUrl = 'https://api.videocaptioner.cn/v1/chat/completions';
+			} else if (aiProvider === 'gemini') {
+				// Gemini uses different API format
+				const modelName = aiModel || 'gemini-1.5-flash';
+				finalUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${aiApiKey.trim()}`;
+				
+				const response = await requestUrl({
+					url: finalUrl,
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						contents: [{
+							parts: [{
+								text: 'Hi'
+							}]
+						}]
+					})
+				});
+				
+				if (response.status === 200) {
+					notice.hide();
+					new Notice('✅ Connection Successful! / 连接成功！');
+				} else {
+					notice.hide();
+					new Notice(`❌ Connection Failed / 连接失败\nStatus: ${response.status}`, 5000);
+				}
+				return;
+			}
+			
+			// For OpenAI-compatible APIs (OpenAI, DeepSeek, SiliconFlow, VideoCaptioner, Custom)
 			const body = {
 				messages: [{ role: 'user', content: 'Hi' }],
 				model: aiModel,
 				stream: false
 			};
 			
-			const finalUrl = aiProvider === 'custom' ? aiBaseUrl : (
-				aiProvider === 'videocaptioner' ? 'https://api.videocaptioner.cn/v1/chat/completions' :
-				(aiBaseUrl || 'https://api.openai.com/v1/chat/completions')
-			);
 			const response = await requestUrl({
 				url: finalUrl,
 				method: 'POST',
 				headers: {
-					'Authorization': `Bearer ${aiApiKey}`,
+					'Authorization': `Bearer ${aiApiKey.trim()}`,
 					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify(body)
