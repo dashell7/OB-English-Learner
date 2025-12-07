@@ -1,4 +1,4 @@
-import { requestUrl, App } from 'obsidian';
+import { requestUrl, App, Notice } from 'obsidian';
 import { VideoData, VideoMetadata, TranscriptLine } from './types';
 import { AITranslator, TranslatorConfig } from './translator';
 import { BilibiliScraper } from './bilibili-scraper';
@@ -16,6 +16,28 @@ interface YTranscriptAPI {
 }
 
 export class YouTubeScraper {
+    /**
+     * Clean subtitle text: remove [Music], [Applause], etc. and fix formatting
+     */
+    private static cleanSubtitleText(text: string): string {
+        if (!text) return '';
+        
+        // Remove common subtitle tags
+        let cleaned = text
+            .replace(/\[Music\]/gi, '')           // Remove [Music]
+            .replace(/\[Applause\]/gi, '')        // Remove [Applause]
+            .replace(/\[Laughter\]/gi, '')        // Remove [Laughter]
+            .replace(/\[Background Music\]/gi, '') // Remove [Background Music]
+            .replace(/\[Sound\]/gi, '')           // Remove [Sound]
+            .replace(/\[Noise\]/gi, '')           // Remove [Noise]
+            .replace(/\[.*?\]/g, '')               // Remove any other [tags]
+            .replace(/\\n/g, ' ')                 // Replace \n with space
+            .replace(/\s+/g, ' ')                  // Collapse multiple spaces
+            .trim();                                // Trim whitespace
+        
+        return cleaned;
+    }
+
     /**
      * Get built-in transcript fetcher (no external plugin dependency)
      */
@@ -173,9 +195,11 @@ export class YouTubeScraper {
                         enTranscript = response.lines.map((line: any) => ({
                             start: line.offset / 1000,
                             duration: line.duration / 1000,
-                            text: line.text,
+                            text: this.cleanSubtitleText(line.text),
                             lang: 'en'
                         }));
+                        // Filter out empty lines after cleaning
+                        enTranscript = enTranscript.filter(line => line.text.length > 0);
                         break;
                     } else {
                         console.log(`[LinguaSync] ⚠️ ${langCode} returned Chinese content, trying next...`);
@@ -203,17 +227,19 @@ export class YouTubeScraper {
                         zhTranscript = originalResponse.lines.map((line: any) => ({
                             start: line.offset / 1000,
                             duration: line.duration / 1000,
-                            text: line.text,
+                            text: this.cleanSubtitleText(line.text),
                             lang: 'zh'
                         }));
+                        zhTranscript = zhTranscript.filter(line => line.text.length > 0);
                     } else {
                         console.log(`[LinguaSync] ✅ Original transcript is English`);
                         enTranscript = originalResponse.lines.map((line: any) => ({
                             start: line.offset / 1000,
                             duration: line.duration / 1000,
-                            text: line.text,
+                            text: this.cleanSubtitleText(line.text),
                             lang: 'en'
                         }));
+                        enTranscript = enTranscript.filter(line => line.text.length > 0);
                     }
                 } catch (e) {
                     console.error(`[LinguaSync] Failed to fetch original transcript:`, e);
@@ -225,12 +251,20 @@ export class YouTubeScraper {
                 // If we have English and AI translation is enabled, use AI
                 if (enTranscript && translatorConfig) {
                     console.log('[LinguaSync] Using AI to translate English to Chinese...');
+                    console.log(`[LinguaSync] Provider: ${translatorConfig.provider}, Model: ${translatorConfig.model || 'default'}`);
                     try {
                         const translator = new AITranslator(translatorConfig);
                         zhTranscript = await translator.translateTranscript(enTranscript);
                         console.log(`[LinguaSync] ✅ AI translation completed: ${zhTranscript.length} lines`);
                     } catch (error) {
-                        console.error('[LinguaSync] AI translation failed:', error);
+                        console.error('[LinguaSync] ❌ AI translation failed:', error);
+                        console.error('[LinguaSync] Error details:', error.message || error);
+                        
+                        // Show error to user
+                        new Notice(`AI Translation failed: ${error.message || 'Unknown error'}. Video will be imported without Chinese translation.`, 8000);
+                        
+                        // Continue without translation instead of failing completely
+                        console.log('[LinguaSync] Continuing without AI translation...');
                     }
                 }
                 
@@ -254,9 +288,10 @@ export class YouTubeScraper {
                                 zhTranscript = response.lines.map((line: any) => ({
                                     start: line.offset / 1000,
                                     duration: line.duration / 1000,
-                                    text: line.text,
+                                    text: this.cleanSubtitleText(line.text),
                                     lang: 'zh'
                                 }));
+                                zhTranscript = zhTranscript.filter(line => line.text.length > 0);
                                 break;
                             }
                         } catch (e) {
@@ -267,26 +302,29 @@ export class YouTubeScraper {
             }
             
             // Determine which to use as primary transcript
-            // IMPORTANT: For Language Learner, ALWAYS use English as primary display if available
+            // IMPORTANT: Always preserve original YouTube timestamps for perfect alignment
             let transcript: TranscriptLine[];
             let translatedTranscript: TranscriptLine[] | undefined;
             
-            // Resegment transcripts to ensure full sentences
-            if (enTranscript) {
-                console.log('[LinguaSync] Resegmenting English transcript...');
-                enTranscript = this.resegmentTranscript(enTranscript);
-            }
-            if (zhTranscript) {
-                console.log('[LinguaSync] Resegmenting Chinese transcript...');
-                zhTranscript = this.resegmentTranscript(zhTranscript);
-            }
+            // ✅ NEW LOGIC: Return original YouTube transcripts without modification
+            // This ensures SRT files have perfect timestamp alignment with the video
+            // AI segmentation can be done later in main.ts as an optional step
             
             if (enTranscript) {
-                // English is available - use it as primary for note display
-                console.log('[LinguaSync] ✅ Using English as primary transcript (for note display)');
-                console.log(`[LinguaSync] English: ${enTranscript.length} lines, Chinese: ${zhTranscript ? zhTranscript.length : 0} lines`);
+                // Use original English transcript (no resegmentation)
+                console.log('[LinguaSync] ✅ Using original English transcript (preserves YouTube timestamps)');
+                console.log(`[LinguaSync] English: ${enTranscript.length} lines`);
                 transcript = enTranscript;
-                translatedTranscript = zhTranscript || undefined;
+                
+                // Use original Chinese translation if available
+                if (zhTranscript) {
+                    console.log('[LinguaSync] ✅ Using original Chinese translation from YouTube');
+                    console.log(`[LinguaSync] Chinese: ${zhTranscript.length} lines`);
+                    translatedTranscript = zhTranscript;
+                } else {
+                    console.log('[LinguaSync] ℹ️ No Chinese translation available in YouTube captions');
+                    translatedTranscript = undefined;
+                }
             } else if (zhTranscript) {
                 // Only Chinese available - use it but warn user
                 console.log('[LinguaSync] ⚠️ No English transcript found, using Chinese as fallback');
@@ -314,6 +352,7 @@ export class YouTubeScraper {
 
     /**
      * Resegment transcript based on punctuation to form complete sentences
+     * IMPORTANT: Preserves original YouTube timestamps for accurate audio alignment
      */
     private static resegmentTranscript(lines: TranscriptLine[]): TranscriptLine[] {
         if (!lines || lines.length === 0) return [];
@@ -329,73 +368,54 @@ export class YouTubeScraper {
             return lines;
         }
 
-        // Flatten text and calculate approximate char-level timing
-        const allChars: { char: string, time: number }[] = [];
-        
-        for (const line of lines) {
-            if (!line.text) continue;
-            const safeText = line.text;
-            const durationPerChar = (line.duration || 0) / safeText.length;
-            
-            for (let i = 0; i < safeText.length; i++) {
-                allChars.push({
-                    char: safeText[i],
-                    time: line.start + (i * durationPerChar)
-                });
-            }
-            // Add implicit space between original lines
-            allChars.push({ char: ' ', time: line.start + line.duration });
-        }
-
+        // Strategy: Merge lines at sentence boundaries, but preserve original timestamps
+        // This ensures subtitles align perfectly with actual speech in video
         const newLines: TranscriptLine[] = [];
-        let currentText = '';
-        let startTime = allChars.length > 0 ? allChars[0].time : 0;
+        let buffer = '';
+        let bufferStart = 0;
+        let bufferEnd = 0;
+        let bufferLang = lines[0].lang;
         
-        const sentenceEndRegex = /[.!?。！？]/;
+        const sentenceEndRegex = /[.!?。！？]$/;
 
-        for (let i = 0; i < allChars.length; i++) {
-            const c = allChars[i];
-            currentText += c.char;
-
-            const isTerminator = sentenceEndRegex.test(c.char);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.text) continue;
             
-            // Look ahead to avoid splitting on "..." or "!!"
-            const nextChar = i + 1 < allChars.length ? allChars[i+1].char : '';
-            const isNextTerminator = sentenceEndRegex.test(nextChar);
+            // Start new buffer if empty
+            if (!buffer) {
+                bufferStart = line.start;
+            }
             
-            // Basic check for abbreviations (Mr. Dr. etc) - simplified
-            const isAbbreviation = /\b(Mr|Mrs|Ms|Dr|Prof|St|Ave|Co|Inc|Ltd)\.$/i.test(currentText.trim());
+            // Append current line to buffer
+            buffer += (buffer ? ' ' : '') + line.text;
+            bufferEnd = line.start + (line.duration || 0);
             
-            if (isTerminator && !isNextTerminator && !isAbbreviation) {
-                const endTime = c.time;
-                const finalText = currentText.trim();
+            // Check if this line ends with sentence terminator
+            const trimmedText = line.text.trim();
+            const endsWithPunctuation = sentenceEndRegex.test(trimmedText);
+            
+            // Basic check for abbreviations (Mr. Dr. etc)
+            const isAbbreviation = /\b(Mr|Mrs|Ms|Dr|Prof|St|Ave|Co|Inc|Ltd)\.$/i.test(trimmedText);
+            
+            // Create new line if:
+            // 1. Current line ends with punctuation (and not abbreviation)
+            // 2. OR this is the last line
+            if ((endsWithPunctuation && !isAbbreviation) || i === lines.length - 1) {
+                newLines.push({
+                    text: buffer.trim(),
+                    start: bufferStart,
+                    duration: Math.max(0.1, bufferEnd - bufferStart),
+                    lang: bufferLang
+                });
                 
-                if (finalText) {
-                    newLines.push({
-                        text: finalText,
-                        start: startTime,
-                        duration: Math.max(0.1, endTime - startTime),
-                        lang: lines[0].lang
-                    });
-                }
-                
-                currentText = '';
-                if (i + 1 < allChars.length) {
-                    startTime = allChars[i+1].time;
-                }
+                // Reset buffer
+                buffer = '';
+                bufferStart = 0;
             }
         }
 
-        // Add remaining text
-        if (currentText.trim()) {
-             newLines.push({
-                text: currentText.trim(),
-                start: startTime,
-                duration: Math.max(0.1, (allChars[allChars.length-1]?.time || startTime) - startTime),
-                lang: lines[0].lang
-            });
-        }
-
+        console.log(`[LinguaSync] Resegmented: ${lines.length} → ${newLines.length} lines (preserved original timestamps)`);
         return newLines;
     }
 

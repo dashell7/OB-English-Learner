@@ -19,7 +19,14 @@ export class BasesIntegration {
         for (const folder of folders) {
             const path = normalizePath(folder);
             if (!await this.app.vault.adapter.exists(path)) {
-                await this.app.vault.createFolder(path);
+                try {
+                    await this.app.vault.createFolder(path);
+                } catch (err) {
+                    // Ignore error if folder already exists
+                    if (!err.message || !err.message.includes('Folder already exists')) {
+                        throw err;
+                    }
+                }
             }
         }
 

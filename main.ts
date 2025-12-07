@@ -44,51 +44,52 @@ Formatted text:`;
 const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	// Setup
 	hasCompletedSetup: false,
-	// General
+	// General - 优化后的默认文件夹结构
 	defaultLanguage: 'en',
 	targetLanguage: 'zh',
-	videoFolder: 'Languages/Videos',
+	videoFolder: '01-Videos',  // 简化路径，更直观
 	assetsFolder: 'Languages/Assets',  // 已废弃，保留用于兼容
-	subtitlesFolder: 'Languages/Subtitles',  // 新增：字幕文件夹
-	thumbnailsFolder: 'Languages/Thumbnails',  // 新增：封面图片文件夹
+	subtitlesFolder: '02-Subtitles',  // 简化路径
+	thumbnailsFolder: '01-Videos',  // 封面图与视频笔记放在一起
 	autoDownloadThumbnails: true,
 	generateBilingualTranscript: true,
-	// AI Translation & Formatting
-	enableAITranslation: false,
-	enableAIFormatting: false,  // Note content
-	enableAISubtitles: false,   // SRT files
+	// AI Translation & Formatting - 默认开启核心功能
+	enableAITranslation: true,  // ✅ 默认开启 AI 翻译
+	enableAIFormatting: true,   // ✅ 默认开启智能分段（Note content）
+	enableAISubtitles: true,    // ✅ 默认开启 SRT 优化
 	aiFormattingPrompt: DEFAULT_FORMATTING_PROMPT,
-	aiProvider: 'deepseek',
-	aiApiKey: '',
+	aiProvider: 'deepseek',  // DeepSeek 性价比最高
+	aiApiKey: '',  // ⚠️ 需要用户配置
 	aiModel: 'deepseek-chat',
 	aiBaseUrl: 'https://api.deepseek.com/v1/chat/completions',
-	// Voice to Text
-	enableVoice2Text: false,
-	sttProvider: 'openai',
-	sttApiKey: '',
-	sttLanguage: '',
+	// Voice to Text - 默认配置
+	enableVoice2Text: true,  // ✅ 默认开启语音识别
+	sttProvider: 'openai',  // Whisper 质量最好
+	sttApiKey: '',  // ⚠️ 可留空，使用主 API Key
+	sttLanguage: '',  // 自动检测
 	sttModel: 'whisper-1',
 	sttBaseUrl: 'https://api.openai.com/v1/audio/transcriptions',
-	saveAudio: true,
-	audioFolder: 'recordings',
-	audioFormat: 'wav',
+	saveAudio: true,  // 默认保存录音文件
+	audioFolder: '03-Recordings',  // 统一的录音文件夹
+	audioFormat: 'wav',  // 无损格式
 	audioFilenameTemplate: 'Recording_{{date:YYYY-MM-DD}}_{{time:HH-mm-ss}}',
-	// Text to Speech
-	enableTTS: false,
-    ttsProvider: 'openai',
-    ttsApiKey: '',
-	ttsModel: 'tts-1',
-	ttsVoice: 'alloy',
+	recordOnlyMode: false,  // 默认关闭只录音模式
+	// Text to Speech - 优化后的默认设置
+	enableTTS: true,  // ✅ 默认开启 TTS
+    ttsProvider: 'openai',  // OpenAI 质量最好
+    ttsApiKey: '',  // ⚠️ 可留空，使用主 API Key
+	ttsModel: 'tts-1-hd',  // 默认高清模型
+	ttsVoice: 'nova',  // Nova 女声，发音清晰自然
     ttsSpeed: 1.0,
     ttsBaseUrl: '',
-    ttsOutputFormat: 'audio-16khz-128kbitrate-mono-mp3',
-    // TTS Advanced
-    ttsShowPlayer: 'always',
-    ttsAutoscroll: true,
-    ttsCacheType: 'local',
-    ttsCacheDuration: 24,
-    ttsAudioFolder: '03-Resources/aloud',
-    ttsChunking: 'sentence',
+    ttsOutputFormat: 'mp3',  // MP3 格式，兼容性好
+    // TTS Advanced - 匹配 Aloud 的体验
+    ttsShowPlayer: 'always',  // 始终显示播放器
+    ttsAutoscroll: true,  // 自动滚动到当前句子
+    ttsCacheType: 'local',  // 本地缓存，节省成本
+    ttsCacheDuration: 168,  // 缓存 7 天（24 * 7）
+    ttsAudioFolder: '03-Resources/aloud',  // 音频文件存储位置
+    ttsChunking: 'sentence',  // 按句子分块
 	// Template
 	noteTemplate: DEFAULT_TEMPLATE,
 	// Account
@@ -112,14 +113,6 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.transcriptionService = new TranscriptionService(this.settings);
         this.ttsManager = new TTSManager(this.app, this.settings);
         this.registerEditorExtension(ttsPanelExtension(this.ttsManager));
-
-		// Show Setup Wizard on first install
-		if (!this.settings.hasCompletedSetup) {
-			// Delay to let Obsidian fully load
-			setTimeout(() => {
-				new SetupWizardModal(this.app, this).open();
-			}, 1000);
-		}
 
 		// Add ribbon icon
 		this.addRibbonIcon('video', 'Import YouTube Video', () => {
@@ -176,12 +169,168 @@ export default class LinguaSyncPlugin extends Plugin {
 			}
 		});
 
-		// Command: Speak Selection
+		// ==================== TTS Commands (Aloud-style) ====================
+		
+		// Command: Play/Pause (with hotkey)
 		this.addCommand({
-			id: 'speak-selection',
-			name: 'Speak Selection (TTS)',
+			id: 'tts-play-pause',
+			name: 'Aloud: Play/Pause',
+			hotkeys: [{ modifiers: ['Mod'], key: 'Space' }],
+			editorCallback: (editor: Editor) => {
+				const state = this.ttsManager.getState();
+				if (state === 'playing') {
+					this.ttsManager.pause();
+					new Notice('⏸ Paused');
+				} else if (state === 'paused') {
+					this.ttsManager.resume();
+					new Notice('▶ Resumed');
+				} else {
+					this.speakSelection(editor);
+				}
+			}
+		});
+		
+		// Command: Stop (with hotkey)
+		this.addCommand({
+			id: 'tts-stop',
+			name: 'Aloud: Stop',
+			hotkeys: [{ modifiers: [], key: 'Escape' }],
+			callback: () => {
+				this.ttsManager.stop();
+				new Notice('⏹ Stopped');
+			}
+		});
+		
+		// Command: Next sentence (with hotkey)
+		this.addCommand({
+			id: 'tts-next-sentence',
+			name: 'Aloud: Next sentence',
+			hotkeys: [{ modifiers: ['Mod'], key: 'ArrowRight' }],
+			callback: () => {
+				this.ttsManager.next();
+				new Notice('⏭ Next sentence');
+			}
+		});
+		
+		// Command: Previous sentence (with hotkey)
+		this.addCommand({
+			id: 'tts-previous-sentence',
+			name: 'Aloud: Previous sentence',
+			hotkeys: [{ modifiers: ['Mod'], key: 'ArrowLeft' }],
+			callback: () => {
+				this.ttsManager.previous();
+				new Notice('⏮ Previous sentence');
+			}
+		});
+		
+		// Command: Increase playback speed (with hotkey)
+		this.addCommand({
+			id: 'tts-increase-speed',
+			name: 'Aloud: Increase playback speed',
+			hotkeys: [{ modifiers: ['Mod'], key: 'ArrowUp' }],
+			callback: () => {
+				const currentSpeed = this.settings.ttsSpeed || 1.0;
+				const newSpeed = Math.min(Math.round((currentSpeed + 0.1) * 20) / 20, 2.5);
+				this.settings.ttsSpeed = newSpeed;
+				this.ttsManager.setPlaybackSpeed(newSpeed);
+				this.saveSettings();
+				new Notice(`⚡ Speed: ${newSpeed.toFixed(2)}x`);
+			}
+		});
+		
+		// Command: Decrease playback speed (with hotkey)
+		this.addCommand({
+			id: 'tts-decrease-speed',
+			name: 'Aloud: Decrease playback speed',
+			hotkeys: [{ modifiers: ['Mod'], key: 'ArrowDown' }],
+			callback: () => {
+				const currentSpeed = this.settings.ttsSpeed || 1.0;
+				const newSpeed = Math.max(Math.round((currentSpeed - 0.1) * 20) / 20, 0.5);
+				this.settings.ttsSpeed = newSpeed;
+				this.ttsManager.setPlaybackSpeed(newSpeed);
+				this.saveSettings();
+				new Notice(`⚡ Speed: ${newSpeed.toFixed(2)}x`);
+			}
+		});
+		
+		// Command: Toggle autoscroll
+		this.addCommand({
+			id: 'tts-toggle-autoscroll',
+			name: 'Aloud: Toggle autoscroll',
+			callback: () => {
+				this.settings.ttsAutoscroll = !this.settings.ttsAutoscroll;
+				this.saveSettings();
+				const icon = this.settings.ttsAutoscroll ? '👁️' : '🚫';
+				const status = this.settings.ttsAutoscroll ? 'enabled' : 'disabled';
+				new Notice(`${icon} Autoscroll ${status}`);
+			}
+		});
+		
+		// Command: Play selection
+		this.addCommand({
+			id: 'tts-play-selection',
+			name: 'Aloud: Play selection',
 			editorCallback: (editor: Editor) => {
 				this.speakSelection(editor);
+			}
+		});
+		
+		// Command: Play from clipboard
+		this.addCommand({
+			id: 'tts-play-clipboard',
+			name: 'Aloud: Play from clipboard',
+			callback: async () => {
+				try {
+					const text = await navigator.clipboard.readText();
+					if (text) {
+						// Create a dummy editor for clipboard playback
+						const dummyEditor: any = {
+							getCursor: () => ({ line: 0, ch: 0 }),
+							posToOffset: (pos: any) => 0,
+							offsetToPos: (offset: number) => ({ line: 0, ch: 0 }),
+							scrollIntoView: () => {}
+						};
+						this.ttsManager.playSelection(text, dummyEditor, { line: 0, ch: 0 }, { line: 0, ch: text.length });
+					} else {
+						new Notice('Clipboard is empty');
+					}
+				} catch (err) {
+					new Notice('Failed to read clipboard: ' + err.message);
+					console.error(err);
+				}
+			}
+		});
+		
+		// Command: Export selection to audio file
+		this.addCommand({
+			id: 'tts-export-selection',
+			name: 'Aloud: Export selection to audio',
+			editorCallback: async (editor: Editor) => {
+				const text = editor.getSelection();
+				if (text) {
+					await this.exportTextToAudio(text, false);
+				} else {
+					new Notice('No text selected');
+				}
+			}
+		});
+		
+		// Command: Paste clipboard as audio embed
+		this.addCommand({
+			id: 'tts-paste-as-audio',
+			name: 'Aloud: Paste clipboard as audio',
+			editorCallback: async (editor: Editor) => {
+				try {
+					const text = await navigator.clipboard.readText();
+					if (text) {
+						await this.exportTextToAudio(text, true, editor);
+					} else {
+						new Notice('Clipboard is empty');
+					}
+				} catch (err) {
+					new Notice('Failed to read clipboard: ' + err.message);
+					console.error(err);
+				}
 			}
 		});
 
@@ -238,15 +387,6 @@ export default class LinguaSyncPlugin extends Plugin {
 				}
 			})
 		);
-
-		// Command: Open Setup Wizard
-		this.addCommand({
-			id: 'open-setup-wizard',
-			name: '🧙 Open Setup Wizard',
-			callback: () => {
-				new SetupWizardModal(this.app, this).open();
-			}
-		});
 
 		// Command: Import YouTube Video
 		this.addCommand({
@@ -384,18 +524,25 @@ export default class LinguaSyncPlugin extends Plugin {
 							}
 						}
 						
-						// 2. Transcribe
-						const notice = new Notice('Transcribing audio... ⏳', 0);
+						// 2. Transcribe (跳过如果是只录音模式)
 						let transcription = '';
 						
-						try {
-							transcription = await this.transcriptionService.transcribe(audioBlob, this.settings.audioFormat);
-							notice.hide();
-							new Notice('✅ Transcription complete!');
-						} catch (err) {
-							notice.hide();
-							new Notice('❌ Transcription failed: ' + err.message);
-							console.error(err);
+						if (this.settings.recordOnlyMode) {
+							// 只录音模式：跳过转录
+							new Notice('✅ Audio saved! (Record-only mode, no transcription)');
+						} else {
+							// 正常模式：进行转录
+							const notice = new Notice('Transcribing audio... ⏳', 0);
+							
+							try {
+								transcription = await this.transcriptionService.transcribe(audioBlob, this.settings.audioFormat);
+								notice.hide();
+								new Notice('✅ Transcription complete!');
+							} catch (err) {
+								notice.hide();
+								new Notice('❌ Transcription failed: ' + err.message);
+								console.error(err);
+							}
 						}
 
 						// 3. Insert both (Audio Top, Text Bottom, no blank line)
@@ -441,19 +588,19 @@ export default class LinguaSyncPlugin extends Plugin {
 			return;
 		}
 
-		const notice = new Notice('Generating speech... ⏳', 0);
+		// Get selection range
+		const from = editor.getCursor('from');
+		const to = editor.getCursor('to');
+		
 		try {
-			await this.ttsManager.speak(selection);
-			notice.hide();
-			new Notice('Playing audio... 🔊');
+			await this.ttsManager.playSelection(selection, editor, from, to);
 		} catch (error) {
-			notice.hide();
 			new Notice('TTS Failed: ' + error.message);
 			console.error(error);
 		}
 	}
 
-	async exportTextToAudio(text: string, replaceSelection: boolean = false) {
+	async exportTextToAudio(text: string, replaceSelection: boolean = false, providedEditor?: Editor) {
 		if (!this.settings.enableTTS) {
 			new Notice('Please enable Text to Speech in settings first.');
 			return;
@@ -464,7 +611,7 @@ export default class LinguaSyncPlugin extends Plugin {
 			return;
 		}
 		
-		// Generate filename: prefix-hash.mp3 (like Aloud)
+		// Generate filename: prefix-hash.ext (like Aloud)
 		const prefix = text
 			.replace(/\s/g, '-')
 			.replace(/[^a-zA-Z0-9_-]/g, '')
@@ -479,13 +626,28 @@ export default class LinguaSyncPlugin extends Plugin {
 		}
 		const hashStr = Math.abs(hash).toString(16);
 		
+		// Determine file extension based on output format
+		let extension = 'mp3'; // Default
+		if (this.settings.ttsProvider === 'azure' && this.settings.ttsOutputFormat) {
+			const format = this.settings.ttsOutputFormat.toLowerCase();
+			// Azure WAV formats: riff-*-pcm
+			if (format.includes('riff') || format.includes('pcm') || format.includes('wav')) {
+				extension = 'wav';
+			} else if (format.includes('mp3')) {
+				extension = 'mp3';
+			} else if (format.includes('ogg') || format.includes('opus')) {
+				extension = 'ogg';
+			} else if (format.includes('webm')) {
+				extension = 'webm';
+			}
+		}
+		
 		const folder = this.settings.ttsAudioFolder || '03-Resources/aloud';
-		const filename = `${prefix}-${hashStr}.mp3`;
+		const filename = `${prefix}-${hashStr}.${extension}`;
 		const filepath = `${folder}/${filename}`;
 		
-		// Get active editor
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const editor = view?.editor;
+		// Get editor (use provided editor or get active one)
+		const editor = providedEditor || this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
 		
 		const finalReplacement = `![[${filepath}]]\n`;
 		const loadingReplacement = `<loading file="${filepath}" />\n`;
@@ -588,7 +750,13 @@ export default class LinguaSyncPlugin extends Plugin {
 		// Ensure folder exists
 		const folder = this.app.vault.getAbstractFileByPath(folderPath);
 		if (!folder) {
-			await this.app.vault.createFolder(folderPath);
+			try {
+				await this.app.vault.createFolder(folderPath);
+			} catch (err) {
+				if (!err.message || !err.message.includes('Folder already exists')) {
+					throw err;
+				}
+			}
 		}
 		
 		const arrayBuffer = await audioBlob.arrayBuffer();
@@ -598,17 +766,18 @@ export default class LinguaSyncPlugin extends Plugin {
 	}
 
 	async importVideo(url: string) {
-		// Total steps: 1.Extract ID, 2.Fetch transcript, 3.Detect language, 4.AI translate, 5.Create folders, 6.Generate SRTs, 7.Download thumbnail, 8.Create note
+		// 优化的进度分配：前3步快速（0-15%），AI翻译动态（15-85%），后续步骤（85-100%）
 		const totalSteps = 8;
 		const progress = new ProgressNotice(totalSteps);
 
 		try {
-			// Step 1: Extract video ID
-			progress.nextStep('Extracting video ID...');
+			// Step 1: Extract video ID (0% -> 5%)
+			progress.setProgress(0, 'Extracting video ID...');
 			const videoId = YouTubeScraper.extractVideoId(url);
 			if (!videoId) {
 				throw new Error('Invalid YouTube URL');
 			}
+			progress.setProgress(5, 'Video ID extracted');
 
 			// Check if this video was already imported
 			const existingNote = await this.findExistingNote(url, videoId);
@@ -619,8 +788,8 @@ export default class LinguaSyncPlugin extends Plugin {
 				progress.updateMessage('Video already exists, updating...');
 			}
 
-			// Step 2: Fetch original transcript
-			progress.nextStep('Fetching video transcript...');
+			// Step 2: Fetch original transcript (5% -> 10%)
+			progress.setProgress(5, 'Fetching video transcript...');
 			
 			// Prepare translator config
 			const translatorConfig = this.settings.enableAITranslation && this.settings.aiApiKey ? {
@@ -632,6 +801,58 @@ export default class LinguaSyncPlugin extends Plugin {
 
 			// Fetch video data with progress updates
 			const videoData = await this.fetchVideoDataWithProgress(url, translatorConfig, progress);
+			progress.setProgress(15, 'Transcript fetched');
+
+			// Step 4: AI translate original transcript if YouTube has no translation
+			// IMPORTANT: Translate ORIGINAL transcript to preserve timestamps
+			if (videoData.transcript && videoData.transcript.length > 0) {
+				const hasYouTubeTranslation = videoData.translatedTranscript && videoData.translatedTranscript.length > 0;
+				const needsAITranslation = !hasYouTubeTranslation && this.settings.enableAITranslation && this.settings.aiApiKey;
+				
+				if (needsAITranslation) {
+					try {
+						// AI 翻译占用 15% 到 85% 的进度空间（70% 的动态范围）
+						const aiStartProgress = 15;
+						const aiEndProgress = 85;
+						const aiProgressRange = aiEndProgress - aiStartProgress;
+						
+						progress.setProgress(aiStartProgress, 'AI translating original transcript...');
+						console.log('[LinguaSync] 📝 No YouTube translation found, using AI to translate original transcript...');
+						
+						const { AITranslator } = await import('./src/translator');
+						const translator = new AITranslator({
+							provider: this.settings.aiProvider,
+							apiKey: this.settings.aiApiKey,
+							model: this.settings.aiModel,
+							baseUrl: this.settings.aiBaseUrl
+						});
+						
+						// ✅ Translate ORIGINAL transcript (preserves timestamps)
+						// 使用进度回调实时更新进度条
+						videoData.translatedTranscript = await translator.translateTranscript(
+							videoData.transcript,
+							(currentBatch, totalBatches, batchProgress) => {
+								// 将批次进度映射到整体进度范围
+								const overallProgress = aiStartProgress + (batchProgress / 100) * aiProgressRange;
+								progress.setProgress(
+									overallProgress, 
+									`AI translating batch ${currentBatch}/${totalBatches}...`
+								);
+							}
+						);
+						
+						// 完成翻译后设置到 85%
+						progress.setProgress(aiEndProgress, 'AI translation completed');
+						console.log(`[LinguaSync] ✅ Original transcript translated: ${videoData.translatedTranscript.length} lines (aligned with original ${videoData.transcript.length} lines)`);
+					} catch (error) {
+						console.error('[LinguaSync] AI translation failed:', error);
+						new Notice(`AI Translation failed: ${error.message}`);
+						// Continue without translation
+					}
+				} else if (hasYouTubeTranslation) {
+					console.log('[LinguaSync] ✅ Using YouTube original translation');
+				}
+			}
 
 			// Step 4.5: AI Segmentation & Punctuation Refinement (if enabled)
 			if (videoData.transcript && videoData.transcript.length > 0) {
@@ -665,6 +886,21 @@ export default class LinguaSyncPlugin extends Plugin {
 							console.log(`[LinguaSync] ✅ Re-translation completed: ${videoData.refinedTranslatedTranscript.length} lines`);
 						}
 
+						// Format article content with punctuation and paragraphs (for ^^^article section)
+						if (this.settings.enableAIFormatting) {
+							progress.nextStep('AI formatting article content...');
+							console.log('[LinguaSync] Formatting article content with AI...');
+							
+							// Use the transcript to format (prefer refined if available)
+							const transcriptToFormat = videoData.refinedTranscript || videoData.transcript;
+							
+							// Apply custom prompt if provided
+							const customPrompt = this.settings.aiFormattingPrompt || undefined;
+							videoData.formattedTranscriptText = await translator.formatTranscript(transcriptToFormat, customPrompt);
+							
+							console.log(`[LinguaSync] ✅ Article content formatted (${videoData.formattedTranscriptText.length} characters)`);
+						}
+
 					} catch (error) {
 						console.error('[LinguaSync] AI segmentation failed, using original:', error);
 						new Notice(`AI Segmentation failed: ${error.message}`);
@@ -675,17 +911,17 @@ export default class LinguaSyncPlugin extends Plugin {
 				}
 			}
 
-			// Step 5: Create folders and files
-			progress.nextStep('Creating folders...');
+			// Step 5: Create folders and files (85% -> 87%)
+			progress.setProgress(85, 'Creating folders...');
 
-			// Step 6: Generate SRT files
-			progress.nextStep('Generating subtitle files...');
+			// Step 6: Generate SRT files (87% -> 92%)
+			progress.setProgress(87, 'Generating subtitle files...');
 
-			// Step 7: Download thumbnail
-			progress.nextStep('Downloading thumbnail...');
+			// Step 7: Download thumbnail (92% -> 96%)
+			progress.setProgress(92, 'Downloading thumbnail...');
 
-			// Step 8: Create note
-			progress.nextStep('Creating Markdown note...');
+			// Step 8: Create note (96% -> 99%)
+			progress.setProgress(96, 'Creating Markdown note...');
 
 			// Generate note (pass isUpdate flag)
 			const generator = new NoteGenerator(this.app, this.settings);
@@ -749,18 +985,10 @@ export default class LinguaSyncPlugin extends Plugin {
 	 * Fetch video data with progress updates
 	 */
 	private async fetchVideoDataWithProgress(url: string, translatorConfig: any, progress: ProgressNotice) {
-		// This wraps YouTubeScraper.fetchVideoData and provides progress updates
+		// Fetch transcript from YouTube (10% -> 15%)
+		progress.setProgress(10, 'Fetching video data...');
 		
-		// Step 3: Detect language
-		progress.nextStep('Detecting language...');
-		
-		// Step 4: AI translation (if needed)
-		if (translatorConfig) {
-			progress.nextStep('AI translating to Chinese...');
-		} else {
-			progress.nextStep('Fetching translations...');
-		}
-		
+		// Note: AI translation is handled separately in importVideo with fine-grained progress
 		return await YouTubeScraper.fetchVideoData(url, translatorConfig);
 	}
 
@@ -860,6 +1088,38 @@ export default class LinguaSyncPlugin extends Plugin {
 				border-bottom: 1px solid var(--background-modifier-border);
 				color: var(--text-normal);
 			}
+			
+			/* === Cards === */
+			.ls-card {
+				background: var(--background-primary);
+				border: 1px solid var(--background-modifier-border);
+				border-radius: 10px;
+				padding: 20px;
+				margin-bottom: 16px;
+			}
+			.ls-card-title {
+				font-size: 1.1em;
+				font-weight: 600;
+				margin-bottom: 16px;
+				color: var(--text-normal);
+			}
+			
+			/* Dropdown in cards and sections */
+			.ls-card select, .setting-item select, select.dropdown {
+				min-width: 200px !important;
+				min-height: 40px !important;
+				height: auto !important;
+				line-height: 1.8 !important;
+				padding: 10px 12px !important;
+				font-size: 14px !important;
+			}
+			
+			/* Ensure dropdown options have enough height */
+			.ls-card select option, .setting-item select option {
+				padding: 8px 12px;
+				min-height: 32px;
+				line-height: 1.6;
+			}
 
 			/* === Inputs & Controls === */
 			.ls-section input[type="text"], .ls-section select, .ls-section textarea {
@@ -867,6 +1127,22 @@ export default class LinguaSyncPlugin extends Plugin {
 				border: 1px solid var(--background-modifier-border);
 				padding: 6px 10px;
 				font-size: 14px;
+			}
+			.ls-section select {
+				min-width: 200px !important;
+				min-height: 40px !important;
+				height: auto !important;
+				line-height: 1.8 !important;
+				padding: 10px 12px !important;
+			}
+			
+			/* Universal select styling for all settings */
+			.setting-item-control select {
+				min-height: 40px !important;
+				height: auto !important;
+				line-height: 1.8 !important;
+				padding: 10px 12px !important;
+				font-size: 14px !important;
 			}
 			.ls-section input[type="text"]:focus, .ls-section textarea:focus {
 				border-color: var(--interactive-accent);
@@ -964,6 +1240,117 @@ export default class LinguaSyncPlugin extends Plugin {
 				border-radius: 10px;
 				width: 6%;
 				transition: height 0.04s linear;
+			}
+			
+			/* === Voice Recording Modal (Voice2Text Style) === */
+			.voice2text-modeless-container {
+				pointer-events: none;
+			}
+			
+			.recording-modal {
+				width: 300px;
+				max-width: 90vw;
+				border-radius: 12px;
+				box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+			}
+			
+			.voice2text-modal-container {
+				padding: 16px;
+				background: var(--background-primary);
+			}
+			
+			.voice2text-waveform-container {
+				margin-bottom: 12px;
+				background: #1a1a1a;
+				border-radius: 8px;
+				overflow: hidden;
+			}
+			
+			.voice2text-waveform {
+				display: block;
+				width: 100%;
+				height: 60px;
+			}
+			
+			.voice2text-timer {
+				text-align: center;
+				font-size: 16px;
+				font-weight: 600;
+				margin-bottom: 12px;
+				color: var(--text-normal);
+			}
+			
+			.voice2text-controls {
+				display: flex;
+				justify-content: center;
+				gap: 8px;
+			}
+			
+			.voice2text-button {
+				width: 48px;
+				height: 48px;
+				border-radius: 8px;
+				border: none;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				transition: all 0.2s ease;
+				color: white;
+			}
+			
+			.voice2text-button:hover {
+				transform: scale(1.05);
+				box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+			}
+			
+			.voice2text-button:active {
+				transform: scale(0.95);
+			}
+			
+			.voice2text-button svg {
+				width: 24px;
+				height: 24px;
+			}
+			
+			.voice2text-transcription {
+				margin-top: 12px;
+				padding: 12px;
+				background: var(--background-secondary);
+				border-radius: 8px;
+				font-size: 14px;
+				line-height: 1.5;
+				max-height: 200px;
+				overflow-y: auto;
+			}
+			
+			.voice2text-transcribing {
+				margin-top: 12px;
+				padding: 12px;
+				text-align: center;
+				font-size: 14px;
+				color: var(--text-muted);
+			}
+			
+			.voice2text-transcribing-text {
+				margin-right: 4px;
+			}
+			
+			.voice2text-transcribing-dots span {
+				animation: voice2text-blink 1.4s infinite;
+			}
+			
+			.voice2text-transcribing-dots span:nth-child(2) {
+				animation-delay: 0.2s;
+			}
+			
+			.voice2text-transcribing-dots span:nth-child(3) {
+				animation-delay: 0.4s;
+			}
+			
+			@keyframes voice2text-blink {
+				0%, 60%, 100% { opacity: 0; }
+				30% { opacity: 1; }
 			}
 		`;
 		document.head.appendChild(styleEl);
@@ -1131,40 +1518,6 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		return badge;
 	}
 
-	// Search: Filter settings by query
-	filterSettings(query: string): void {
-		const allSettings = this.containerEl.querySelectorAll('.setting-item');
-		const allCards = this.containerEl.querySelectorAll('.ls-card');
-		
-		if (!query) {
-			// Show all if no query
-			allSettings.forEach(item => (item as HTMLElement).style.display = '');
-			allCards.forEach(card => (card as HTMLElement).style.display = '');
-			return;
-		}
-		
-		allSettings.forEach(item => {
-			const text = item.textContent?.toLowerCase() || '';
-			(item as HTMLElement).style.display = text.includes(query) ? '' : 'none';
-		});
-		
-		// Hide empty cards
-		allCards.forEach(card => {
-			const visibleSettings = card.querySelectorAll('.setting-item:not([style*="display: none"])');
-			(card as HTMLElement).style.display = visibleSettings.length > 0 ? '' : 'none';
-		});
-	}
-
-	// Setup Wizard: Guide new users through configuration
-	showSetupWizard(): void {
-		new SetupWizardModal(this.app, this.plugin).open();
-	}
-
-	// Presets: Quick configuration templates
-	showPresets(): void {
-		new PresetsModal(this.app, this.plugin, this).open();
-	}
-
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -1173,39 +1526,6 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		const headerEl = containerEl.createDiv({ cls: 'ls-header' });
 		headerEl.createEl('h1', { text: 'OB English Learner', cls: 'ls-title' });
 		headerEl.createEl('p', { text: 'Import and manage YouTube/Bilibili video transcripts for language learning.', cls: 'ls-subtitle' });
-
-		// Quick Access Bar & Search
-		const quickBar = containerEl.createDiv({ cls: 'ls-quick-bar' });
-		
-		// Search Box
-		const searchContainer = quickBar.createDiv({ cls: 'ls-search-container' });
-		const searchInput = searchContainer.createEl('input', {
-			type: 'text',
-			placeholder: '🔍 Search settings... / 搜索设置',
-			cls: 'ls-search-input'
-		});
-		
-		searchInput.addEventListener('input', (e) => {
-			const query = (e.target as HTMLInputElement).value.toLowerCase();
-			this.filterSettings(query);
-		});
-		
-		// Quick Access Buttons
-		const quickActions = quickBar.createDiv({ cls: 'ls-quick-actions' });
-		
-		// Setup Wizard Button
-		const wizardBtn = quickActions.createEl('button', {
-			text: '🧙 Setup Wizard',
-			cls: 'ls-quick-btn'
-		});
-		wizardBtn.onclick = () => this.showSetupWizard();
-		
-		// Presets Button
-		const presetsBtn = quickActions.createEl('button', {
-			text: '📋 Presets',
-			cls: 'ls-quick-btn'
-		});
-		presetsBtn.onclick = () => this.showPresets();
 
 		// Tab Navigation (Reorganized: 4 tabs instead of 6)
 		const navEl = containerEl.createDiv({ cls: 'ls-tab-nav' });
@@ -1258,10 +1578,23 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 
 		new Setting(generalCard)
 			.setName(this.createBilingualLabel('Default Language', '默认语言'))
-			.setDesc('Default transcript language (e.g., en, zh, es)')
-			.addText(text => text
-				.setPlaceholder('en')
-				.setValue(this.plugin.settings.defaultLanguage)
+			.setDesc('Default transcript language / 默认字幕语言')
+			.addDropdown(dropdown => dropdown
+				.addOption('en', 'English / 英语')
+				.addOption('zh', '中文 / Chinese')
+				.addOption('zh-CN', '简体中文 / Simplified Chinese')
+				.addOption('zh-TW', '繁體中文 / Traditional Chinese')
+				.addOption('ja', '日本語 / Japanese')
+				.addOption('ko', '한국어 / Korean')
+				.addOption('es', 'Español / Spanish')
+				.addOption('fr', 'Français / French')
+				.addOption('de', 'Deutsch / German')
+				.addOption('ru', 'Русский / Russian')
+				.addOption('pt', 'Português / Portuguese')
+				.addOption('it', 'Italiano / Italian')
+				.addOption('ar', 'العربية / Arabic')
+				.addOption('hi', 'हिन्दी / Hindi')
+				.setValue(this.plugin.settings.defaultLanguage || 'en')
 				.onChange(async (value) => {
 					this.plugin.settings.defaultLanguage = value;
 					this.debouncedSave();
@@ -1355,10 +1688,19 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				{ id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash-8B' }
 			],
 			'siliconflow': [
-				{ id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
-				{ id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
+				{ id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3 ' },
+				{ id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1 (推理增强)' },
 				{ id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B' },
-				{ id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B' }
+				{ id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B' },
+				{ id: 'Qwen/QwQ-32B-Preview', name: 'QwQ 32B (长思考链)' },
+				{ id: 'moonshotai/Kimi-K2-Thinking', name: 'Kimi K2 Thinking (深度推理)' },
+				{ id: 'zai-org/GLM-4.6', name: 'GLM-4.6 (智谱)' },
+				{ id: 'THUDM/glm-4-9b-chat', name: 'GLM-4 9B Chat' },
+				{ id: 'Pro/THUDM/glm-4-plus', name: 'GLM-4 Plus (旗舰)' },
+				{ id: 'Qwen/Qwen2.5-7B-Instruct', name: 'Qwen 2.5 7B (轻量)' },
+				{ id: 'Qwen/Qwen2.5-14B-Instruct', name: 'Qwen 2.5 14B' },
+				{ id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', name: 'Llama 3.1 70B' },
+				{ id: 'meta-llama/Meta-Llama-3.1-405B-Instruct', name: 'Llama 3.1 405B (超大)' }
 			],
 			'videocaptioner': [
 				{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini (最新小型)' },
@@ -1366,6 +1708,9 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 				{ id: 'gpt-4o', name: 'GPT-4o' },
 				{ id: 'claude-3.5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
 				{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
+			],
+			'custom': [
+				{ id: 'custom-model', name: 'Custom Model' }
 			]
 		};
 
@@ -1444,12 +1789,12 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			.setName(this.createBilingualLabel('AI Provider', 'AI 服务提供商'))
 			.setDesc('Choose your AI service provider / 选择 AI 服务商')
 			.addDropdown(dropdown => dropdown
-				.addOption('deepseek', 'DeepSeek')
-				.addOption('siliconflow', 'SiliconFlow')
-				.addOption('videocaptioner', 'VideoCaptioner')
-				.addOption('openai', 'OpenAI')
-				.addOption('gemini', 'Gemini')
-				.addOption('custom', 'Custom')
+				.addOption('deepseek', 'DeepSeek ⭐ (推荐 - 性价比高)')
+				.addOption('siliconflow', 'SiliconFlow (国内快速)')
+				.addOption('videocaptioner', 'VideoCaptioner (视频专用)')
+				.addOption('openai', 'OpenAI (强大但较贵)')
+				.addOption('gemini', 'Gemini (免费额度高)')
+				.addOption('custom', 'Custom (自定义)')
 				.setValue(this.plugin.settings.aiProvider)
 				.onChange(async (value: any) => {
 					this.plugin.settings.aiProvider = value;
@@ -1583,12 +1928,12 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.enableVoice2Text) {
 			new Setting(sttCard)
 				.setName(this.createBilingualLabel('STT Provider', '语音识别服务商'))
-				.setDesc('Service provider for Speech-to-Text')
+				.setDesc('Service provider for Speech-to-Text / 语音转文字服务提供商')
 				.addDropdown(dropdown => dropdown
-					.addOption('openai', 'OpenAI')
-					.addOption('custom', 'Custom')
-					.addOption('assemblyai', 'AssemblyAI')
-					.addOption('azure', 'Azure')
+					.addOption('openai', 'OpenAI (Whisper ⭐ 推荐)')
+					.addOption('custom', 'Custom (自定义)')
+					.addOption('assemblyai', 'AssemblyAI (专业转录)')
+					.addOption('azure', 'Azure (企业级)')
 					.setValue(this.plugin.settings.sttProvider)
 				.onChange(async (value: any) => {
 					this.plugin.settings.sttProvider = value;
@@ -1618,33 +1963,75 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					}));
 
 			// Base URL for Custom
-			if (provider === 'custom' || provider === 'azure') {
-				let urlDesc = 'Custom API Endpoint';
-				let placeHolder = 'https://api.openai.com/v1/audio/transcriptions';
-				if (provider === 'azure') {
-					urlDesc = 'Azure Region';
-					placeHolder = 'eastus';
-				}
-				
+			if (provider === 'custom') {
 				new Setting(sttCard)
-					.setName(this.createBilingualLabel(provider === 'azure' ? 'Region' : 'Endpoint URL', provider === 'azure' ? '区域' : '接口地址'))
-					.setDesc(urlDesc)
+					.setName(this.createBilingualLabel('Endpoint URL', '接口地址'))
+					.setDesc('Custom API Endpoint')
 					.addText(text => text
-						.setPlaceholder(placeHolder)
+						.setPlaceholder('https://api.openai.com/v1/audio/transcriptions')
 						.setValue(this.plugin.settings.sttBaseUrl)
 						.onChange(async (value) => {
 							this.plugin.settings.sttBaseUrl = value;
 							this.debouncedSave();
 						}));
 			}
+			
+			// Azure Region dropdown
+			if (provider === 'azure') {
+				const azureRegions = [
+					'eastus', 'eastus2', 'westus', 'westus2', 'westus3',
+					'centralus', 'northcentralus', 'southcentralus', 'westcentralus',
+					'canadacentral', 'brazilsouth',
+					'northeurope', 'westeurope', 'uksouth', 'francecentral',
+					'germanywestcentral', 'norwayeast', 'switzerlandnorth', 'switzerlandwest', 'swedencentral',
+					'eastasia', 'southeastasia', 'japaneast', 'japanwest', 'koreacentral',
+					'australiaeast', 'centralindia', 'jioindiawest', 'uaenorth'
+				];
+				
+				new Setting(sttCard)
+					.setName(this.createBilingualLabel('Region', '区域'))
+					.setDesc('Azure Region / Azure 区域')
+					.addDropdown(dropdown => {
+						azureRegions.forEach(region => {
+							const label = region.charAt(0).toUpperCase() + region.slice(1);
+							dropdown.addOption(region, label);
+						});
+						dropdown.setValue(this.plugin.settings.sttBaseUrl || 'eastus');
+						dropdown.onChange(async (value) => {
+							this.plugin.settings.sttBaseUrl = value;
+							await this.debouncedSave();
+						});
+					});
+			}
 
 			// Language
 			new Setting(sttCard)
 				.setName(this.createBilingualLabel('Language', '语言'))
-				.setDesc('Spoken language code (e.g., en, zh). Leave empty for auto-detection')
-				.addText(text => text
-					.setPlaceholder('e.g. zh')
-					.setValue(this.plugin.settings.sttLanguage)
+				.setDesc('Spoken language code / 语音语言代码')
+				.addDropdown(dropdown => dropdown
+					.addOption('', 'Auto-detect / 自动检测')
+					.addOption('en', 'English / 英语')
+					.addOption('en-US', 'English (US) / 英语（美国）')
+					.addOption('en-GB', 'English (UK) / 英语（英国）')
+					.addOption('zh', 'Chinese / 中文')
+					.addOption('zh-CN', 'Chinese (Simplified) / 简体中文')
+					.addOption('zh-TW', 'Chinese (Traditional) / 繁体中文')
+					.addOption('ja', 'Japanese / 日语')
+					.addOption('ja-JP', 'Japanese (Japan) / 日语（日本）')
+					.addOption('ko', 'Korean / 韩语')
+					.addOption('ko-KR', 'Korean (Korea) / 韩语（韩国）')
+					.addOption('es', 'Spanish / 西班牙语')
+					.addOption('es-ES', 'Spanish (Spain) / 西班牙语（西班牙）')
+					.addOption('fr', 'French / 法语')
+					.addOption('fr-FR', 'French (France) / 法语（法国）')
+					.addOption('de', 'German / 德语')
+					.addOption('de-DE', 'German (Germany) / 德语（德国）')
+					.addOption('ru', 'Russian / 俄语')
+					.addOption('pt', 'Portuguese / 葡萄牙语')
+					.addOption('it', 'Italian / 意大利语')
+					.addOption('ar', 'Arabic / 阿拉伯语')
+					.addOption('hi', 'Hindi / 印地语')
+					.setValue(this.plugin.settings.sttLanguage || '')
 					.onChange(async (value) => {
 						this.plugin.settings.sttLanguage = value;
 						this.debouncedSave();
@@ -1667,11 +2054,11 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			// Save Audio Settings
 			new Setting(sttCard)
 				.setName(this.createBilingualLabel('Audio file format', '音频文件格式'))
-				.setDesc('Choose the format for saving audio recordings')
+				.setDesc('Choose the format for saving audio recordings / 选择录音文件格式')
 				.addDropdown(dropdown => dropdown
-					.addOption('wav', 'WAV')
-					.addOption('webm', 'WebM')
-					.addOption('mp3', 'MP3')
+					.addOption('wav', 'WAV (无损，文件大)')
+					.addOption('webm', 'WebM (兼容性好)')
+					.addOption('mp3', 'MP3 (压缩，文件小)')
 					.setValue(this.plugin.settings.audioFormat || 'wav')
 					.onChange(async (value) => {
 						this.plugin.settings.audioFormat = value as any;
@@ -1689,15 +2076,57 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					}));
 
 			new Setting(sttCard)
+				.setName(this.createBilingualLabel('Record Only Mode', '只录音模式'))
+				.setDesc('Only record audio without transcription (save audio file only)')
+				.addToggle(toggle => toggle
+					.setValue(this.plugin.settings.recordOnlyMode)
+					.onChange(async (value) => {
+						this.plugin.settings.recordOnlyMode = value;
+						// 如果开启只录音模式，自动开启保存音频
+						if (value && !this.plugin.settings.saveAudio) {
+							this.plugin.settings.saveAudio = true;
+						}
+						this.saveAndNotify();
+						this.display(); // 刷新界面
+					}));
+
+			const filenameSetting = new Setting(sttCard)
 				.setName(this.createBilingualLabel('Filename Template', '录音文件名模板'))
-				.setDesc('Available variables: {{date}}, {{time}}, {{title}}, {{timestamp}}')
-				.addText(text => text
+				.setDesc('Available variables: {{date}}, {{time}}, {{title}}, {{timestamp}}');
+			
+			filenameSetting.addText(text => {
+				text
 					.setPlaceholder('Recording_{{date:YYYY-MM-DD}}_{{time:HH-mm-ss}}')
 					.setValue(this.plugin.settings.audioFilenameTemplate)
 					.onChange(async (value) => {
 						this.plugin.settings.audioFilenameTemplate = value;
 						this.debouncedSave();
-					}));
+						// Update preview
+						updatePreview(value);
+					});
+				text.inputEl.style.width = '100%';
+			});
+			
+			// Add preview
+			const previewEl = sttCard.createDiv({ cls: 'ls-template-preview' });
+			previewEl.style.marginTop = '8px';
+			previewEl.style.fontSize = '0.9em';
+			previewEl.style.color = 'var(--text-muted)';
+			
+			const updatePreview = (template: string) => {
+				const now = new Date();
+				const preview = template
+					.replace(/\{\{date:YYYY-MM-DD\}\}/g, now.toISOString().split('T')[0])
+					.replace(/\{\{date\}\}/g, now.toISOString().split('T')[0])
+					.replace(/\{\{time:HH-mm-ss\}\}/g, now.toTimeString().split(' ')[0].replace(/:/g, '-'))
+					.replace(/\{\{time\}\}/g, now.toTimeString().split(' ')[0].replace(/:/g, '-'))
+					.replace(/\{\{timestamp\}\}/g, String(now.getTime()))
+					.replace(/\{\{title\}\}/g, 'UntitledNote');
+				previewEl.setText(`Preview / 预览: ${preview}.${this.plugin.settings.audioFormat || 'wav'}`);
+			};
+			
+			// Initial preview
+			updatePreview(this.plugin.settings.audioFilenameTemplate);
 
 			new Setting(sttCard)
 				.setName(this.createBilingualLabel('Audio Folder', '音频保存路径'))
@@ -1712,6 +2141,17 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 						});
 					new FolderSuggest(this.app, text.inputEl);
 				});
+			
+			// Test STT Connection button
+			new Setting(sttCard)
+				.setName(this.createBilingualLabel('Test STT Connection', '测试语音服务连接'))
+				.setDesc('Test if your Voice-to-Text configuration works / 测试语音转文字服务配置')
+				.addButton(button => button
+					.setButtonText('Test Connection / 测试')
+					.setClass('ls-button')
+					.onClick(async () => {
+						await this.testSTTConnection();
+					}));
 		}
 
 		// === Text to Speech (TTS) Card ===
@@ -1740,11 +2180,12 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             // Provider Selection
             new Setting(ttsCard)
                 .setName(this.createBilingualLabel('TTS Provider', 'TTS 服务商'))
+                .setDesc('Service provider for Text-to-Speech / 文本转语音服务提供商')
                 .addDropdown(dropdown => dropdown
-                    .addOption('openai', 'OpenAI')
-                    .addOption('azure', 'Azure')
-                    .addOption('elevenlabs', 'ElevenLabs')
-                    .addOption('custom', 'Custom')
+                    .addOption('openai', 'OpenAI ⭐ (推荐 - 质量好)')
+                    .addOption('azure', 'Azure (多语言支持)')
+                    .addOption('elevenlabs', 'ElevenLabs (最自然)')
+                    .addOption('custom', 'Custom (自定义)')
                     .setValue(this.plugin.settings.ttsProvider || 'openai')
                     .onChange(async (value: any) => {
                         this.plugin.settings.ttsProvider = value;
@@ -1755,7 +2196,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             const provider = this.plugin.settings.ttsProvider || 'openai';
 
             // API Key (Optional Override)
-            new Setting(section)
+            new Setting(ttsCard)
                 .setName(this.createBilingualLabel('TTS API Key', 'TTS API 密钥'))
                 .setDesc('Leave empty to use global API Key (if available) / 留空则使用全局 Key')
                 .addText(text => text
@@ -1768,7 +2209,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 
             // OpenAI / Custom Settings
             if (provider === 'openai' || provider === 'custom') {
-                new Setting(section)
+                new Setting(ttsCard)
                     .setName(this.createBilingualLabel('TTS Model', 'TTS 模型'))
                     .addDropdown(dropdown => dropdown
                         .addOption('tts-1', 'TTS-1')
@@ -1779,7 +2220,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                             this.debouncedSave();
                         }));
                 
-                new Setting(section)
+                new Setting(ttsCard)
                     .setName(this.createBilingualLabel('TTS Voice', 'TTS 音色'))
                     .addDropdown(dropdown => dropdown
                         .addOption('alloy', 'Alloy')
@@ -1795,7 +2236,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         }));
                 
                 if (provider === 'custom') {
-                     new Setting(section)
+                     new Setting(ttsCard)
                         .setName(this.createBilingualLabel('TTS Base URL', 'TTS 接口地址'))
                         .setDesc('e.g. https://api.openai.com/v1/audio/speech')
                         .addText(text => text
@@ -1821,7 +2262,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                     'australiaeast', 'centralindia', 'jioindiawest', 'uaenorth'
                 ];
 
-                new Setting(section)
+                new Setting(ttsCard)
                     .setName(this.createBilingualLabel('Region', '区域'))
                     .setDesc('The Azure region for your Speech Services resource')
                     .addDropdown(dropdown => {
@@ -1843,7 +2284,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                 const region = this.plugin.settings.ttsBaseUrl || 'eastus';
                 
                 if (apiKey && region) {
-                    const voiceSetting = new Setting(section)
+                    const voiceSetting = new Setting(ttsCard)
                         .setName(this.createBilingualLabel('Voice', '语音'))
                         .setDesc('The Azure voice to use for speech synthesis');
                     
@@ -1910,7 +2351,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         });
                     });
                 } else {
-                    new Setting(section)
+                    new Setting(ttsCard)
                         .setName(this.createBilingualLabel('Voice', '语音'))
                         .setDesc('⚠️ Enter your Azure API Key above to load available voices / 请先在上方输入 Azure API 密钥');
                 }
@@ -1925,7 +2366,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                     { label: 'WAV 48kHz 16bit', value: 'riff-48khz-16bit-mono-pcm' }
                 ];
 
-                new Setting(section)
+                new Setting(ttsCard)
                     .setName(this.createBilingualLabel('Output Format', '输出格式'))
                     .setDesc('The audio format for the generated speech')
                     .addDropdown(dropdown => {
@@ -1942,7 +2383,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 
             // ElevenLabs Settings
             if (provider === 'elevenlabs') {
-                new Setting(section)
+                new Setting(ttsCard)
                     .setName(this.createBilingualLabel('Voice ID', 'Voice ID'))
                     .setDesc('ElevenLabs Voice ID')
                     .addText(text => text
@@ -1953,7 +2394,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                             this.debouncedSave();
                         }));
                  
-                 new Setting(section)
+                 new Setting(ttsCard)
                     .setName(this.createBilingualLabel('Model ID', '模型 ID'))
                     .setDesc('e.g. eleven_monolingual_v1')
                     .addText(text => text
@@ -1966,7 +2407,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             }
             
             // Speed Control (Common)
-            new Setting(section)
+            new Setting(ttsCard)
                 .setName(this.createBilingualLabel('Playback Speed', '播放速度'))
                 .setDesc('0.25x - 4.0x')
                 .addSlider(slider => slider
@@ -1979,7 +2420,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                     }));
 
             // Test Voice Button
-            new Setting(section)
+            new Setting(ttsCard)
                 .setName(this.createBilingualLabel('Test Voice', '测试语音'))
                 .setDesc('Test your current TTS configuration')
                 .addButton(btn => btn
@@ -1989,10 +2430,10 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         btn.setButtonText('Testing...');
                         try {
                             const testText = 'Hello, this is a test of the text to speech system.';
-                            await this.plugin.ttsManager.speak(testText);
-                            new Notice('TTS Test successful!');
+                            await this.plugin.ttsManager.testSpeak(testText);
+                            new Notice('✅ TTS Test successful!');
                         } catch (err) {
-                            new Notice('TTS Test failed: ' + err.message);
+                            new Notice('❌ TTS Test failed: ' + err.message);
                             console.error(err);
                         } finally {
                             btn.setDisabled(false);
@@ -2004,12 +2445,12 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             section.createEl('h4', { text: 'User Interface / 用户界面' });
             
             new Setting(section)
-                .setName(this.createBilingualLabel('Show player toolbar', '显示播放器工具栏'))
-                .setDesc('Show the player toolbar under these conditions')
+                .setName(this.createBilingualLabel('Show Player Toolbar', '显示播放器工具栏'))
+                .setDesc('Show the player toolbar under these conditions / 显示播放器工具栏的条件')
                 .addDropdown(dropdown => dropdown
-                    .addOption('always', 'Always')
-                    .addOption('auto', 'Auto')
-                    .addOption('never', 'Never')
+                    .addOption('always', 'Always show / 始终显示')
+                    .addOption('auto', 'When playing / 播放时显示')
+                    .addOption('never', 'Never show / 从不显示')
                     .setValue(this.plugin.settings.ttsShowPlayer || 'always')
                     .onChange(async (value: any) => {
                         this.plugin.settings.ttsShowPlayer = value;
@@ -2017,8 +2458,8 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(section)
-                .setName(this.createBilingualLabel('Autoscroll Player View', '自动滚动播放视图'))
-                .setDesc('Automatically scroll the player view to keep the active text visible.')
+                .setName(this.createBilingualLabel('Autoscroll Player', '自动滚动播放器'))
+                .setDesc('Automatically scroll to keep the active text visible / 自动滚动保持活动文本可见')
                 .addToggle(toggle => toggle
                     .setValue(this.plugin.settings.ttsAutoscroll)
                     .onChange(async (value) => {
@@ -2030,22 +2471,23 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             section.createEl('h4', { text: 'Storage / 存储' });
 
             new Setting(section)
-                .setName(this.createBilingualLabel('Cache type', '缓存类型'))
-                .setDesc('Local device based cache (recommended), or vault based.')
+                .setName(this.createBilingualLabel('Cache Type', '缓存类型'))
+                .setDesc('Local: device cache (recommended) / 本地：设备缓存（推荐）\nVault: shared across devices / 仓库：跨设备共享')
                 .addDropdown(dropdown => dropdown
-                    .addOption('local', 'Local')
-                    .addOption('vault', 'Vault')
-                    .setValue(this.plugin.settings.ttsCacheType || 'local')
+                    .addOption('local', 'Local / 本地')
+                    .addOption('vault', 'Vault / 仓库')
+                    .setValue(this.plugin.settings.ttsCacheType === 'none' ? 'local' : this.plugin.settings.ttsCacheType)
                     .onChange(async (value: any) => {
                         this.plugin.settings.ttsCacheType = value;
                         this.saveAndNotify();
                     }));
 
-            new Setting(section)
-                .setName(this.createBilingualLabel('Cache duration', '缓存时长'))
-                .setDesc('Cache duration in hours.')
-                .addText(text => text
-                    .setPlaceholder('24')
+            const cacheDurationSetting = new Setting(section)
+                .setName(this.createBilingualLabel('Cache Duration', '缓存时长'))
+                .setDesc('Audio cache duration in hours / 音频缓存时长（小时）');
+            
+            cacheDurationSetting.addText(text => {
+                text.setPlaceholder('24')
                     .setValue(String(this.plugin.settings.ttsCacheDuration || 24))
                     .onChange(async (value) => {
                         const num = parseInt(value);
@@ -2053,11 +2495,19 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                             this.plugin.settings.ttsCacheDuration = num;
                             this.debouncedSave();
                         }
-                    }));
+                    });
+                text.inputEl.style.width = '100px';
+            });
+            
+            // Add "hours" label after input
+            const hoursLabel = cacheDurationSetting.controlEl.createSpan();
+            hoursLabel.setText('hours');
+            hoursLabel.style.marginLeft = '8px';
+            hoursLabel.style.color = 'var(--text-muted)';
 
             const cacheSizeSetting = new Setting(section)
-                .setName(this.createBilingualLabel('Cache Disk Usage', '缓存占用'))
-                .setDesc('Calculating...');
+                .setName(this.createBilingualLabel('Cache Disk Usage', '缓存磁盘占用'))
+                .setDesc('Calculating... / 计算中...');
             
             const updateCacheSize = async () => {
                 try {
@@ -2100,8 +2550,8 @@ class LinguaSyncSettingTab extends PluginSettingTab {
             updateCacheSize();
 
             new Setting(section)
-                .setName(this.createBilingualLabel('Audio Folder', '音频缓存目录'))
-                .setDesc('The folder to store audio files (for Vault cache)')
+                .setName(this.createBilingualLabel('Audio Folder', '音频文件夹'))
+                .setDesc('Folder to store exported audio files / 导出音频文件的保存位置')
                 .addText(text => {
                     text
                         .setPlaceholder('03-Resources/aloud')
@@ -2114,10 +2564,10 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                 });
 
             // === Audio ===
-            section.createEl('h4', { text: 'Audio / 音频' });
+            section.createEl('h4', { text: 'Audio' });
 
             new Setting(section)
-                .setName(this.createBilingualLabel('Text chunking', '文本分块'))
+                .setName('Text chunking')
                 .setDesc('Split text into sentences or paragraphs for playback')
                 .addDropdown(dropdown => dropdown
                     .addOption('sentence', 'Sentence')
@@ -2128,17 +2578,6 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         this.saveAndNotify();
                     }));
 		}
-
-		// Test Connection for STT
-		new Setting(section)
-			.setName(this.createBilingualLabel('Test STT Connection', '测试语音服务连接'))
-			.setDesc('Test if your Voice-to-Text configuration works / 测试语音转文字服务配置')
-			.addButton(button => button
-				.setButtonText('Test Connection / 测试')
-				.setClass('ls-button')
-				.onClick(async () => {
-					await this.testSTTConnection();
-				}));
 	}
 
 	// === Advanced Tab (Template + Account) ===
@@ -2553,364 +2992,4 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
 	}
 }
 
-// Setup Wizard Modal
-class SetupWizardModal extends Modal {
-	plugin: LinguaSyncPlugin;
-	currentStep: number = 0;
-	steps: string[] = ['welcome', 'ai', 'audio', 'folders', 'complete'];
-
-	constructor(app: App, plugin: LinguaSyncPlugin) {
-		super(app);
-		this.plugin = plugin;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.addClass('ls-wizard-modal');
-		
-		this.renderStep();
-	}
-
-	renderStep() {
-		const { contentEl } = this;
-		contentEl.empty();
-		
-		const step = this.steps[this.currentStep];
-		
-		// Header
-		const header = contentEl.createDiv({ cls: 'ls-wizard-header' });
-		header.createEl('h2', { text: '🧙 Setup Wizard / 设置向导' });
-		header.createEl('p', { text: `Step ${this.currentStep + 1} of ${this.steps.length} / 第 ${this.currentStep + 1} 步，共 ${this.steps.length} 步` });
-		
-		// Progress bar
-		const progress = contentEl.createDiv({ cls: 'ls-wizard-progress' });
-		const bar = progress.createDiv({ cls: 'ls-wizard-progress-bar' });
-		bar.style.width = `${((this.currentStep + 1) / this.steps.length) * 100}%`;
-		
-		// Content
-		const content = contentEl.createDiv({ cls: 'ls-wizard-content' });
-		
-		switch(step) {
-			case 'welcome':
-				this.renderWelcome(content);
-				break;
-			case 'ai':
-				this.renderAISetup(content);
-				break;
-			case 'audio':
-				this.renderAudioSetup(content);
-				break;
-			case 'folders':
-				this.renderFolders(content);
-				break;
-			case 'complete':
-				this.renderComplete(content);
-				break;
-		}
-		
-		// Navigation
-		const nav = contentEl.createDiv({ cls: 'ls-wizard-nav' });
-		
-		if (this.currentStep > 0 && step !== 'complete') {
-			const backBtn = nav.createEl('button', { text: '← Back / 上一步', cls: 'ls-wizard-btn' });
-			backBtn.onclick = () => {
-				this.currentStep--;
-				this.renderStep();
-			};
-		}
-		
-		if (step !== 'complete') {
-			const nextBtn = nav.createEl('button', { 
-				text: this.currentStep === this.steps.length - 2 ? 'Finish / 完成' : 'Next / 下一步 →', 
-				cls: 'ls-wizard-btn ls-wizard-btn-primary' 
-			});
-			nextBtn.onclick = () => {
-				this.currentStep++;
-				this.renderStep();
-			};
-		} else {
-			const closeBtn = nav.createEl('button', { text: 'Close / 关闭', cls: 'ls-wizard-btn ls-wizard-btn-primary' });
-			closeBtn.onclick = async () => {
-				// Mark setup as completed
-				this.plugin.settings.hasCompletedSetup = true;
-				await this.plugin.saveSettings();
-				new Notice('✅ Setup completed! You can access settings anytime. / 设置完成！您可以随时访问设置。');
-				this.close();
-			};
-		}
-	}
-
-	renderWelcome(container: HTMLElement) {
-		container.createEl('h3', { text: '👋 Welcome to OB English Learner! / 欢迎使用 OB English Learner！' });
-		container.createEl('p', { text: 'This wizard will help you configure the plugin for optimal use. / 此向导将帮助您配置插件以获得最佳使用体验。' });
-		container.createEl('p', { text: 'You can always change these settings later in the plugin settings. / 您可以随时在插件设置中更改这些配置。' });
-		
-		const features = container.createEl('ul');
-		features.createEl('li', { text: '📝 Import YouTube video transcripts / 导入 YouTube 视频字幕' });
-		features.createEl('li', { text: '🤖 AI-powered translation and formatting / AI 智能翻译和格式化' });
-		features.createEl('li', { text: '🎙️ Voice-to-text transcription / 语音转文字' });
-		features.createEl('li', { text: '🔊 Text-to-speech audio generation / 文本转语音' });
-	}
-
-	renderAISetup(container: HTMLElement) {
-		container.createEl('h3', { text: '🤖 AI Configuration / AI 配置' });
-		container.createEl('p', { text: 'Configure AI for translation and text formatting. / 配置 AI 用于翻译和文本格式化。' });
-		
-		new Setting(container)
-			.setName('AI Provider / AI 服务商')
-			.addDropdown(dropdown => dropdown
-				.addOption('deepseek', 'DeepSeek (推荐)')
-				.addOption('openai', 'OpenAI')
-				.addOption('gemini', 'Gemini')
-				.setValue(this.plugin.settings.aiProvider || 'deepseek')
-				.onChange(async (value: any) => {
-					this.plugin.settings.aiProvider = value;
-					await this.plugin.saveSettings();
-				}));
-		
-		new Setting(container)
-			.setName('API Key / API 密钥')
-			.addText(text => text
-				.setPlaceholder('sk-...')
-				.setValue(this.plugin.settings.aiApiKey)
-				.onChange(async (value) => {
-					this.plugin.settings.aiApiKey = value;
-					await this.plugin.saveSettings();
-				}));
-	}
-
-	renderAudioSetup(container: HTMLElement) {
-		container.createEl('h3', { text: '🎙️ Audio Configuration / 音频配置' });
-		container.createEl('p', { text: 'Configure voice-to-text and text-to-speech. / 配置语音转文字和文本转语音。' });
-		
-		// === Voice-to-Text (STT) Section ===
-		const sttSection = container.createDiv({ cls: 'ls-wizard-section' });
-		sttSection.createEl('h4', { text: '🎤 Voice-to-Text (STT) / 语音转文字' });
-		
-		new Setting(sttSection)
-			.setName('Enable Voice-to-Text / 启用语音转文字')
-			.setDesc('Record audio and convert to text / 录音并转换为文字')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.enableVoice2Text)
-				.onChange(async (value) => {
-					this.plugin.settings.enableVoice2Text = value;
-					await this.plugin.saveSettings();
-					this.renderStep(); // Refresh to show/hide settings
-				}));
-		
-		// Show STT settings if enabled
-		if (this.plugin.settings.enableVoice2Text) {
-			new Setting(sttSection)
-				.setName('STT Provider / STT 服务商')
-				.setDesc('Service provider for speech recognition / 语音识别服务提供商')
-				.addDropdown(dropdown => dropdown
-					.addOption('openai', 'OpenAI (Whisper)')
-					.addOption('azure', 'Azure')
-					.addOption('assemblyai', 'AssemblyAI')
-					.setValue(this.plugin.settings.sttProvider || 'openai')
-					.onChange(async (value: any) => {
-						this.plugin.settings.sttProvider = value;
-						await this.plugin.saveSettings();
-					}));
-			
-			new Setting(sttSection)
-				.setName('STT API Key / STT API 密钥')
-				.setDesc('Leave empty to use AI API Key (OpenAI only) / 留空则使用 AI API 密钥（仅限 OpenAI）')
-				.addText(text => text
-					.setPlaceholder('sk-... (optional for OpenAI)')
-					.setValue(this.plugin.settings.sttApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.sttApiKey = value;
-						await this.plugin.saveSettings();
-					}));
-		}
-		
-		// === Text-to-Speech (TTS) Section ===
-		const ttsSection = container.createDiv({ cls: 'ls-wizard-section' });
-		ttsSection.createEl('h4', { text: '🔊 Text-to-Speech (TTS) / 文本转语音' });
-		
-		new Setting(ttsSection)
-			.setName('Enable Text-to-Speech / 启用文本转语音')
-			.setDesc('Convert text to audio / 将文字转换为语音')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.enableTTS)
-				.onChange(async (value) => {
-					this.plugin.settings.enableTTS = value;
-					await this.plugin.saveSettings();
-					this.renderStep(); // Refresh to show/hide settings
-				}));
-		
-		// Show TTS settings if enabled
-		if (this.plugin.settings.enableTTS) {
-			new Setting(ttsSection)
-				.setName('TTS Provider / TTS 服务商')
-				.setDesc('Service provider for text-to-speech / 文本转语音服务提供商')
-				.addDropdown(dropdown => dropdown
-					.addOption('openai', 'OpenAI')
-					.addOption('azure', 'Azure')
-					.addOption('elevenlabs', 'ElevenLabs')
-					.setValue(this.plugin.settings.ttsProvider || 'openai')
-					.onChange(async (value: any) => {
-						this.plugin.settings.ttsProvider = value;
-						await this.plugin.saveSettings();
-					}));
-			
-			new Setting(ttsSection)
-				.setName('TTS API Key / TTS API 密钥')
-				.setDesc('Leave empty to use AI API Key / 留空则使用 AI API 密钥')
-				.addText(text => text
-					.setPlaceholder('sk-... (optional)')
-					.setValue(this.plugin.settings.ttsApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.ttsApiKey = value;
-						await this.plugin.saveSettings();
-					}));
-		}
-	}
-
-	renderFolders(container: HTMLElement) {
-		container.createEl('h3', { text: '📁 Folder Configuration / 文件夹配置' });
-		container.createEl('p', { text: 'Set up where your files will be saved. / 设置文件保存位置。' });
-		
-		new Setting(container)
-			.setName('Video Notes Folder / 视频笔记目录')
-			.addText(text => text
-				.setPlaceholder('Languages/Videos')
-				.setValue(this.plugin.settings.videoFolder)
-				.onChange(async (value) => {
-					this.plugin.settings.videoFolder = value;
-					await this.plugin.saveSettings();
-				}));
-		
-		new Setting(container)
-			.setName('Audio Recordings Folder / 录音文件目录')
-			.addText(text => text
-				.setPlaceholder('recordings')
-				.setValue(this.plugin.settings.audioFolder)
-				.onChange(async (value) => {
-					this.plugin.settings.audioFolder = value;
-					await this.plugin.saveSettings();
-				}));
-	}
-
-	renderComplete(container: HTMLElement) {
-		container.createEl('h3', { text: '✅ Setup Complete! / 设置完成！' });
-		container.createEl('p', { text: 'Your plugin is now configured and ready to use. / 您的插件现已配置完成，可以开始使用了。' });
-		
-		const tips = container.createEl('div', { cls: 'ls-wizard-tips' });
-		tips.createEl('h4', { text: 'Quick Tips / 快速提示：' });
-		const tipsList = tips.createEl('ul');
-		tipsList.createEl('li', { text: 'Use Ctrl/Cmd + P and search "YouTube" to import videos / 按 Ctrl/Cmd + P 搜索 "YouTube" 导入视频' });
-		tipsList.createEl('li', { text: 'Right-click selected text for AI translation options / 右键选中文本使用 AI 翻译' });
-		tipsList.createEl('li', { text: 'Click the microphone icon to start voice recording / 点击麦克风图标开始录音' });
-		tipsList.createEl('li', { text: 'Try the preset configurations for quick setup / 尝试预设配置快速设置' });
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
-
-// Presets Modal
-class PresetsModal extends Modal {
-	plugin: LinguaSyncPlugin;
-	settingTab: LinguaSyncSettingTab;
-
-	constructor(app: App, plugin: LinguaSyncPlugin, settingTab: LinguaSyncSettingTab) {
-		super(app);
-		this.plugin = plugin;
-		this.settingTab = settingTab;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.addClass('ls-presets-modal');
-		
-		contentEl.createEl('h2', { text: '📋 Configuration Presets' });
-		contentEl.createEl('p', { text: 'Choose a preset to quickly configure the plugin for your use case.' });
-		
-		this.renderPresets(contentEl);
-	}
-
-	renderPresets(container: HTMLElement) {
-		const presets = [
-			{
-				name: '🎓 Language Learner',
-				description: 'Optimized for learning languages from YouTube videos',
-				config: {
-					enableAITranslation: true,
-					enableAIFormatting: true,
-					enableVoice2Text: true,
-					enableTTS: true,
-					aiProvider: 'deepseek',
-					defaultLanguage: 'en'
-				}
-			},
-			{
-				name: '📝 Content Creator',
-				description: 'For creating notes and transcripts from videos',
-				config: {
-					enableAITranslation: false,
-					enableAIFormatting: true,
-					enableVoice2Text: true,
-					enableTTS: false,
-					aiProvider: 'openai',
-					defaultLanguage: 'en'
-				}
-			},
-			{
-				name: '🎙️ Podcast Note-Taker',
-				description: 'Voice recording and transcription focused',
-				config: {
-					enableAITranslation: false,
-					enableAIFormatting: true,
-					enableVoice2Text: true,
-					enableTTS: true,
-					saveAudio: true,
-					sttProvider: 'openai'
-				}
-			},
-			{
-				name: '🚀 Minimal Setup',
-				description: 'Basic configuration with minimal features',
-				config: {
-					enableAITranslation: false,
-					enableAIFormatting: false,
-					enableVoice2Text: false,
-					enableTTS: false
-				}
-			}
-		];
-
-		presets.forEach(preset => {
-			const card = container.createDiv({ cls: 'ls-preset-card' });
-			card.createEl('h3', { text: preset.name });
-			card.createEl('p', { text: preset.description });
-			
-			const applyBtn = card.createEl('button', { 
-				text: 'Apply Preset', 
-				cls: 'ls-preset-btn' 
-			});
-			applyBtn.onclick = async () => {
-				await this.applyPreset(preset.config);
-			};
-		});
-	}
-
-	async applyPreset(config: any) {
-		Object.assign(this.plugin.settings, config);
-		await this.plugin.saveSettings();
-		
-		new Notice('✅ Preset applied successfully!');
-		this.close();
-		this.settingTab.display(); // Refresh settings UI
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-}
+// Setup Wizard and Presets modals removed

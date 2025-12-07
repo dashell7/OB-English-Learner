@@ -1,10 +1,27 @@
-import { App, TFile, normalizePath, requestUrl } from 'obsidian';
+import { App, TFile, normalizePath, requestUrl, Notice } from 'obsidian';
 import { VideoData } from './types';
 import { TranscriptParser } from './parser';
 import { AITranslator, TranslatorConfig } from './translator';
 
 export class NoteGenerator {
     constructor(private app: App, private settings: any) { }
+
+    /**
+     * Final cleanup of text: ensure no remaining artifacts
+     */
+    private finalCleanup(text: string): string {
+        return text
+            .replace(/\[Music\]/gi, '')       // Remove any remaining [Music]
+            .replace(/\[Applause\]/gi, '')    // Remove any remaining [Applause]
+            .replace(/\[.*?\]/g, '')           // Remove any other tags
+            .replace(/\\n\\n/g, '\n\n')       // Fix literal \n\n to actual newlines
+            .replace(/\\n/g, ' ')             // Fix literal \n to spaces
+            .replace(/ +/g, ' ')               // Collapse multiple SPACES only (not all whitespace)
+            .replace(/ \n/g, '\n')             // Remove space before newline
+            .replace(/\n /g, '\n')             // Remove space after newline
+            .replace(/\n{3,}/g, '\n\n')       // Max 2 consecutive newlines
+            .trim();
+    }
 
     /**
      * Generate a complete video note with Frontmatter and content
@@ -68,11 +85,11 @@ export class NoteGenerator {
         }
 
         // 3. Check/Create SRTs (in independent subtitles folder)
-        // Determine which transcript to use for SRT files
-        // Use refined if available AND enableAISubtitles is true
-        const useRefinedForSRT = this.settings.enableAISubtitles && videoData.refinedTranscript;
-        const srtTranscript = useRefinedForSRT ? videoData.refinedTranscript! : videoData.transcript;
-        const srtTranslated = useRefinedForSRT ? videoData.refinedTranslatedTranscript : videoData.translatedTranscript;
+        // IMPORTANT: Always use original YouTube transcripts for SRT files
+        // This ensures timestamps are perfectly aligned with the video
+        console.log('[OB English Learner] 📝 Generating SRT files with original YouTube timestamps');
+        const srtTranscript = videoData.transcript;  // ✅ Always use original
+        const srtTranslated = videoData.translatedTranscript;  // ✅ Always use original translation
 
         // This ensures missing files are regenerated, but existing ones are preserved
         const srtPaths = await this.ensureSRTFiles(srtTranscript, srtTranslated, fileName);
@@ -91,8 +108,11 @@ export class NoteGenerator {
                 : noteTranscript);
 
         // AI format transcript if enabled (add punctuation and paragraphs)
-        let formattedTranscriptText: string | null = null;
-        if (this.settings.enableAIFormatting && this.settings.aiApiKey) {
+        // Priority: Use formattedTranscriptText from videoData if already generated (in main.ts)
+        let formattedTranscriptText: string | null = videoData.formattedTranscriptText || null;
+        
+        // Only format if not already done AND AI formatting is enabled
+        if (!formattedTranscriptText && this.settings.enableAIFormatting && this.settings.aiApiKey) {
             try {
                 console.log('[OB English Learner] AI formatting enabled, processing transcript...');
                 const translatorConfig: TranslatorConfig = {
@@ -106,13 +126,20 @@ export class NoteGenerator {
                     displayTranscript, 
                     this.settings.aiFormattingPrompt
                 );
+                console.log('[OB English Learner] ✅ AI formatting completed successfully');
             } catch (error) {
-                console.error('[OB English Learner] AI formatting failed, using default format:', error);
+                console.error('[OB English Learner] ❌ AI formatting failed, using default format:', error);
+                new Notice(`AI Formatting failed: ${error.message}. Check your AI API settings.`);
             }
+        } else if (formattedTranscriptText) {
+            console.log('[OB English Learner] ✅ Using pre-formatted transcript from main import');
+        } else if (this.settings.enableAIFormatting && !this.settings.aiApiKey) {
+            console.warn('[OB English Learner] ⚠️ AI formatting is enabled but AI API Key is not configured!');
+            new Notice('AI Formatting is enabled but AI API Key is missing. Please configure it in settings.');
         }
 
         // Build content using the template (which now includes Frontmatter)
-        const fullContent = this.buildNoteContent(metadata, displayTranscript, srtPaths, fileName, coverPath, formattedTranscriptText);
+        const fullContent = this.buildNoteContent(metadata, displayTranscript, noteTranslated, srtPaths, fileName, coverPath, formattedTranscriptText);
 
         // Create or update the file
         let file: TFile;
@@ -136,6 +163,7 @@ export class NoteGenerator {
     private buildNoteContent(
         metadata: any, 
         transcript: any[], 
+        translatedTranscript: any[] | undefined,
         srtPaths: any, 
         fileName: string, 
         coverPath: string,
@@ -169,23 +197,66 @@ export class NoteGenerator {
         if (formattedTranscriptText) {
             // Use AI-formatted text with punctuation and smart paragraphs
             console.log('[OB English Learner] Using AI-formatted transcript with punctuation');
-            transcriptContent = formattedTranscriptText;
+            transcriptContent = this.finalCleanup(formattedTranscriptText);
         } else {
-            // Default: Language Learner format (pure paragraphs, every 3-4 lines)
-            console.log('[OB English Learner] Using default paragraph formatting');
+            // Default: Bilingual format (English + Chinese translation below)
+            console.log('[OB English Learner] Using default bilingual paragraph formatting');
+            console.log(`[OB English Learner] English lines: ${transcript.length}, Translation lines: ${translatedTranscript ? translatedTranscript.length : 0}`);
+            
+            // Check alignment
+            if (translatedTranscript && transcript.length !== translatedTranscript.length) {
+                console.warn(`[OB English Learner] ⚠️ Alignment issue: English ${transcript.length} lines, Translation ${translatedTranscript.length} lines`);
+            }
+            
             const paragraphs: string[] = [];
-            let currentParagraph: string[] = [];
+            let currentEnParagraph: string[] = [];
+            let currentZhParagraph: string[] = [];
             
             transcript.forEach((line, index) => {
-                currentParagraph.push(line.text);
-                // Create a paragraph every 3-4 lines
-                if ((index + 1) % 3 === 0 || index === transcript.length - 1) {
-                    paragraphs.push(currentParagraph.join(' '));
-                    currentParagraph = [];
+                // Filter out empty lines
+                if (line.text && line.text.trim().length > 0) {
+                    currentEnParagraph.push(line.text);
+                    
+                    // Add corresponding Chinese translation if available
+                    if (translatedTranscript && index < translatedTranscript.length) {
+                        const translatedLine = translatedTranscript[index];
+                        if (translatedLine && translatedLine.text && translatedLine.text.trim().length > 0) {
+                            // Skip if translation failed
+                            if (!translatedLine.text.startsWith('[Translation failed]')) {
+                                currentZhParagraph.push(translatedLine.text);
+                            } else {
+                                console.warn(`[OB English Learner] Translation failed for line ${index + 1}: "${line.text.substring(0, 50)}..."`);
+                            }
+                        }
+                    } else if (translatedTranscript) {
+                        console.warn(`[OB English Learner] No translation for line ${index + 1} (index ${index} >= ${translatedTranscript.length})`);
+                    }
+                    
+                    // Create a paragraph every 3-4 lines
+                    if ((index + 1) % 3 === 0 || index === transcript.length - 1) {
+                        if (currentEnParagraph.length > 0) {
+                            const enText = currentEnParagraph.join(' ');
+                            const zhText = currentZhParagraph.length > 0 ? currentZhParagraph.join(' ') : '';
+                            
+                            // Format: English on top, Chinese below
+                            if (zhText) {
+                                paragraphs.push(`${enText}\n\n${zhText}`);
+                            } else {
+                                // Only English (no translation available for this paragraph)
+                                paragraphs.push(enText);
+                                if (translatedTranscript && translatedTranscript.length > 0) {
+                                    console.warn(`[OB English Learner] ⚠️ Paragraph ${Math.floor((index + 1) / 3)} has no translation`);
+                                }
+                            }
+                            
+                            currentEnParagraph = [];
+                            currentZhParagraph = [];
+                        }
+                    }
                 }
             });
             
-            transcriptContent = paragraphs.join('\n\n');
+            transcriptContent = this.finalCleanup(paragraphs.join('\n\n'));
         }
         
         // Format dates
@@ -200,6 +271,16 @@ export class NoteGenerator {
         const escapedTitle = this.escapeYAMLString(metadata.title);
         const escapedChannel = this.escapeYAMLString(metadata.channel);
         
+        // Determine subtitle path for Media Extended
+        // Priority: bilingual > chinese > english
+        const subtitlePath = srtPaths.bilingual 
+            ? `${this.settings.subtitlesFolder}/${srtPaths.bilingual}`
+            : (srtPaths.chinese 
+                ? `${this.settings.subtitlesFolder}/${srtPaths.chinese}`
+                : (srtPaths.english 
+                    ? `${this.settings.subtitlesFolder}/${srtPaths.english}`
+                    : ''));
+        
         // Replace template variables
         let content = template
             .replace(/{{title}}/g, escapedTitle)
@@ -211,6 +292,7 @@ export class NoteGenerator {
             .replace(/{{date}}/g, today)
             .replace(/{{thumbnail}}/g, metadata.thumbnailUrl || '')
             .replace(/{{cover}}/g, coverLink)
+            .replace(/{{subtitlePath}}/g, subtitlePath)
             .replace(/{{srtLinks}}/g, srtLinks)
             .replace(/{{transcript}}/g, transcriptContent)
             .replace(/{{totalWords}}/g, totalWords.toString())
@@ -224,20 +306,21 @@ export class NoteGenerator {
      */
     private getDefaultTemplate(): string {
         return `---
-type: video-note
+type: video
 status: inbox
-url: {{url}}
+level:  # A1-C2
 title: "{{title}}"
 channel: "{{channel}}"
-duration: {{duration}}
-created_at: {{date}}
+url: "{{url}}"
+cover: "{{cover}}"
+date: {{date}}
 tags:
   - english/video
-cover: "{{cover}}"
+# Language Learner 兼容
+langr: "{{title}}"
+langr-audio: "{{url}}"
+langr-origin: "{{channel}} - YouTube"
 ---
-langr: {{title}}
-langr-audio: {{url}}
-langr-origin: {{channel}} - YouTube
 
 ^^^article
 
@@ -396,10 +479,21 @@ langr-origin: {{channel}} - YouTube
      * Ensure folder exists, create if not
      */
     private async ensureFolderExists(folderPath: string): Promise<void> {
+        if (!folderPath || folderPath === '/' || folderPath === '.') return;
+        
         const folder = this.app.vault.getAbstractFileByPath(folderPath);
         if (!folder) {
-            await this.app.vault.createFolder(folderPath);
-            console.log('[OB English Learner] Created folder:', folderPath);
+            try {
+                await this.app.vault.createFolder(folderPath);
+                console.log('[OB English Learner] Created folder:', folderPath);
+            } catch (err) {
+                // Ignore error if folder already exists (race condition)
+                if (err.message && err.message.includes('Folder already exists')) {
+                    console.log('[OB English Learner] Folder already exists (race condition handled):', folderPath);
+                    return;
+                }
+                throw err;
+            }
         }
     }
 

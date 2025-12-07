@@ -7,14 +7,20 @@ export class ProgressNotice {
     private progressBar: HTMLElement;
     private messageEl: HTMLElement;
     private percentageEl: HTMLElement;
+    private timeEl: HTMLElement;
     private totalSteps: number;
     private currentStep: number = 0;
+    private currentProgress: number = 0; // 更精确的进度（0-100）
     private hideTimeout?: number;
+    private startTime: number;
+    private timerInterval?: number;
 
     constructor(totalSteps: number) {
         this.totalSteps = totalSteps;
+        this.startTime = Date.now();
         this.createToast();
         this.show();
+        this.startTimer();
     }
 
     /**
@@ -119,8 +125,29 @@ export class ProgressNotice {
             box-shadow: 0 0 6px ${isDark ? 'rgba(120, 160, 255, 0.4)' : 'rgba(100, 140, 255, 0.3)'};
         `;
 
+        // Time and Percentage container
+        const statsContainer = content.createDiv();
+        statsContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            flex-shrink: 0;
+        `;
+
+        // Timer
+        this.timeEl = statsContainer.createDiv();
+        this.timeEl.style.cssText = `
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            opacity: 0.7;
+        `;
+        this.timeEl.textContent = '0:00';
+
         // Percentage
-        this.percentageEl = content.createDiv();
+        this.percentageEl = statsContainer.createDiv();
         this.percentageEl.style.cssText = `
             font-size: 12px;
             font-weight: 600;
@@ -128,7 +155,6 @@ export class ProgressNotice {
             font-variant-numeric: tabular-nums;
             min-width: 38px;
             text-align: right;
-            flex-shrink: 0;
         `;
     }
 
@@ -143,10 +169,24 @@ export class ProgressNotice {
     }
 
     /**
+     * Start the timer
+     */
+    private startTimer() {
+        this.timerInterval = window.setInterval(() => {
+            const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            this.timeEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    /**
      * Update to next step
      */
     nextStep(message: string) {
         this.currentStep++;
+        // 基础步骤进度计算（预留 AI 翻译的动态空间）
+        this.currentProgress = Math.min(100, (this.currentStep / this.totalSteps) * 100);
         this.updateDisplay(message);
     }
 
@@ -158,12 +198,25 @@ export class ProgressNotice {
     }
 
     /**
+     * Set progress directly (for fine-grained updates like AI translation batches)
+     */
+    setProgress(progress: number, message?: string) {
+        this.currentProgress = Math.min(100, Math.max(0, progress));
+        if (message) {
+            this.messageEl.textContent = message;
+        }
+        this.updateDisplay();
+    }
+
+    /**
      * Update the display
      */
-    private updateDisplay(message: string) {
-        const percentage = Math.min(100, Math.round((this.currentStep / this.totalSteps) * 100));
+    private updateDisplay(message?: string) {
+        if (message) {
+            this.messageEl.textContent = message;
+        }
         
-        this.messageEl.textContent = message;
+        const percentage = Math.round(this.currentProgress);
         this.percentageEl.textContent = `${percentage}%`;
         this.progressBar.style.width = `${percentage}%`;
     }
@@ -207,6 +260,9 @@ export class ProgressNotice {
     hide() {
         if (this.hideTimeout) {
             clearTimeout(this.hideTimeout);
+        }
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
         }
         
         this.container.style.opacity = '0';

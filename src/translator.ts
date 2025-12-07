@@ -24,29 +24,81 @@ export class AITranslator {
 
     /**
      * 翻译整个字幕数组
+     * @param onProgress 进度回调 (currentBatch, totalBatches, percentage)
      */
-    async translateTranscript(lines: TranscriptLine[]): Promise<TranscriptLine[]> {
+    async translateTranscript(
+        lines: TranscriptLine[], 
+        onProgress?: (current: number, total: number, percentage: number) => void
+    ): Promise<TranscriptLine[]> {
         console.log('[LinguaSync] Starting AI translation...');
         console.log(`[LinguaSync] Provider: ${this.config.provider}, Lines: ${lines.length}`);
 
-        // 批量翻译，每20行一组以提高效率
-        const batchSize = 20;
+        // 根据不同提供商优化批次大小和延迟
+        let batchSize = 25;
+        let delayMs = 2000;
+        
+        // 针对不同 API 提供商的优化策略
+        switch (this.config.provider) {
+            case 'deepseek':
+                batchSize = 30; // DeepSeek 速度快，可以更大批次
+                delayMs = 1500; // 更短延迟
+                break;
+            case 'siliconflow':
+                batchSize = 25; // 平衡设置
+                delayMs = 2000;
+                break;
+            case 'gemini':
+                batchSize = 20; // Gemini 免费版限流严格
+                delayMs = 2500;
+                break;
+            case 'openai':
+                batchSize = 20; // OpenAI 按 token 计费，适中设置
+                delayMs = 2000;
+                break;
+            default:
+                batchSize = 25;
+                delayMs = 2000;
+        }
+        
+        console.log(`[LinguaSync] Batch config: ${batchSize} lines/batch, ${delayMs}ms delay`);
+        
         const translatedLines: TranscriptLine[] = [];
+        const totalBatches = Math.ceil(lines.length / batchSize);
+        const startTime = Date.now();
 
         for (let i = 0; i < lines.length; i += batchSize) {
             const batch = lines.slice(i, i + batchSize);
-            console.log(`[LinguaSync] Translating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(lines.length / batchSize)}...`);
+            const batchNum = Math.floor(i / batchSize) + 1;
             
+            console.log(`[LinguaSync] Translating batch ${batchNum}/${totalBatches} (${batch.length} lines)...`);
+            
+            const batchStart = Date.now();
             const translatedBatch = await this.translateBatch(batch);
             translatedLines.push(...translatedBatch);
+            const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
             
-            // 避免API限流，稍微延迟
+            // 显示进度和预计剩余时间
+            const batchProgress = (batchNum / totalBatches) * 100;
+            const elapsed = (Date.now() - startTime) / 1000;
+            const estimatedTotal = (elapsed / batchNum) * totalBatches;
+            const remaining = Math.max(0, estimatedTotal - elapsed);
+            
+            console.log(`[LinguaSync] ✓ Batch ${batchNum} completed in ${batchTime}s | Progress: ${batchProgress.toFixed(0)}% | ETA: ${remaining.toFixed(0)}s`);
+            
+            // 调用进度回调
+            if (onProgress) {
+                onProgress(batchNum, totalBatches, batchProgress);
+            }
+            
+            // 避免API限流，使用优化后的延迟
             if (i + batchSize < lines.length) {
-                await this.sleep(500);
+                console.log(`[LinguaSync] Waiting ${delayMs / 1000}s before next batch...`);
+                await this.sleep(delayMs);
             }
         }
 
-        console.log('[LinguaSync] ✅ Translation completed!');
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[LinguaSync] ✅ Translation completed! Total time: ${totalTime}s (${lines.length} lines)`);
         return translatedLines;
     }
 
@@ -89,18 +141,40 @@ ${texts}
     }
 
     /**
-     * 调用AI API
+     * 调用AI API (with retry logic for rate limits)
      */
-    private async callAI(prompt: string): Promise<string> {
+    private async callAI(prompt: string, retries: number = 5): Promise<string> {
         const { provider, apiKey, model, baseUrl } = this.config;
 
-        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'videocaptioner' || provider === 'custom') {
-            return await this.callOpenAICompatible(prompt, apiKey, model, baseUrl);
-        } else if (provider === 'gemini') {
-            return await this.callGemini(prompt, apiKey, model);
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'videocaptioner' || provider === 'custom') {
+                    return await this.callOpenAICompatible(prompt, apiKey, model, baseUrl);
+                } else if (provider === 'gemini') {
+                    return await this.callGemini(prompt, apiKey, model);
+                }
+
+                throw new Error(`Unsupported provider: ${provider}`);
+            } catch (error) {
+                const errorMsg = error.message || error.toString();
+                
+                // Check if it's a rate limit error (429)
+                if (errorMsg.includes('429') && attempt < retries - 1) {
+                    // Exponential backoff: 3s, 6s, 12s, 24s, 30s
+                    let waitTime = Math.pow(2, attempt) * 3000; 
+                    if (waitTime > 30000) waitTime = 30000; // Max 30s wait
+                    
+                    console.warn(`[LinguaSync] Rate limit hit (429), retrying in ${waitTime}ms... (attempt ${attempt + 1}/${retries})`);
+                    await this.sleep(waitTime);
+                    continue; // Retry
+                }
+                
+                // If not a rate limit error or final attempt, throw
+                throw error;
+            }
         }
 
-        throw new Error(`Unsupported provider: ${provider}`);
+        throw new Error('API call failed after retries');
     }
 
     /**
@@ -137,32 +211,68 @@ ${texts}
             defaultModel = 'gpt-4.1-mini';
         }
 
-        const response = await requestUrl({
+        const requestBody = {
+            model: model || defaultModel,
+            messages: [
+                {
+                    role: 'system',
+                    content: '你是一个专业的英中翻译助手。'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            temperature: 0.3,
+            max_tokens: 4000
+        };
+
+        // Log request details for debugging
+        console.log(`[LinguaSync] API Request:`, {
             url,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey.trim()}`
-            },
-            body: JSON.stringify({
-                model: model || defaultModel,
-                messages: [
-                    {
-                        role: 'system',
-                        content: '你是一个专业的英中翻译助手。'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.3,
-                max_tokens: 4000
-            })
+            provider: this.config.provider,
+            model: requestBody.model,
+            promptLength: prompt.length
         });
 
-        const data = response.json;
-        return data.choices[0].message.content.trim();
+        try {
+            const response = await requestUrl({
+                url,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey.trim()}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = response.json;
+            
+            // Validate response structure
+            if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+                console.error('[LinguaSync] Invalid API response structure:', data);
+                throw new Error('Invalid API response structure');
+            }
+            
+            return data.choices[0].message.content.trim();
+        } catch (error) {
+            // Enhanced error logging
+            console.error('[LinguaSync] API Request failed:');
+            console.error('  URL:', url);
+            console.error('  Provider:', this.config.provider);
+            console.error('  Model:', requestBody.model);
+            console.error('  Error:', error);
+            
+            // Extract more details if available
+            if (error.status) {
+                console.error('  Status:', error.status);
+            }
+            if (error.message) {
+                console.error('  Message:', error.message);
+            }
+            
+            throw error;
+        }
     }
 
     /**
@@ -255,9 +365,10 @@ ${texts}
             const batchResult = await this.processSegmentationBatch(batch);
             resultLines.push(...batchResult);
             
-            // Avoid rate limits
+            // Avoid rate limits - 增加延迟到3.5秒
             if (i + batchSize < lines.length) {
-                await this.sleep(500);
+                console.log('[LinguaSync] Waiting 3.5s before next batch to avoid rate limit...');
+                await this.sleep(3500);
             }
         }
         
@@ -303,9 +414,16 @@ Output:`;
         const newLines: TranscriptLine[] = [];
         const lines = response.split('\n').filter(l => l.trim());
         
+        // Log AI response for debugging
+        console.log('[LinguaSync] AI segmentation response (first 500 chars):', response.substring(0, 500));
+        console.log(`[LinguaSync] Parsing ${lines.length} response lines for ${originalLines.length} original lines`);
+        
+        // Track which original lines have been processed
+        const processedIndices = new Set<number>();
+        
         for (const line of lines) {
-            // Parse "StartID-EndID: Text"
-            const match = line.match(/^(\d+)-(\d+):\s*(.+)$/);
+            // Parse "StartID-EndID: Text" with flexible whitespace
+            const match = line.match(/^\s*(\d+)\s*-\s*(\d+)\s*:\s*(.+)$/);
             if (match) {
                 const startIdx = parseInt(match[1]) - 1; // 0-based index
                 const endIdx = parseInt(match[2]) - 1;
@@ -325,17 +443,61 @@ Output:`;
                         text: text,
                         lang: startLine.lang
                     });
+                    
+                    // Mark these indices as processed
+                    for (let i = startIdx; i <= endIdx; i++) {
+                        processedIndices.add(i);
+                    }
+                } else {
+                    console.warn(`[LinguaSync] Invalid indices in AI output: ${startIdx}-${endIdx} (max: ${originalLines.length - 1})`);
+                }
+            } else if (line.trim() && !line.match(/^(Output|Input|Rules|Example|Format):/i)) {
+                // Log unmatched lines that don't look like headers
+                console.warn(`[LinguaSync] Failed to parse AI output line: "${line.substring(0, 80)}..."`);
+            }
+        }
+        
+        // Check for unprocessed lines
+        const unprocessedCount = originalLines.length - processedIndices.size;
+        if (unprocessedCount > 0) {
+            console.warn(`[LinguaSync] ⚠️ ${unprocessedCount}/${originalLines.length} original lines were not processed by AI!`);
+            
+            // Add unprocessed lines as-is to avoid data loss
+            for (let i = 0; i < originalLines.length; i++) {
+                if (!processedIndices.has(i)) {
+                    console.warn(`[LinguaSync] Adding unprocessed line ${i + 1}: "${originalLines[i].text.substring(0, 50)}..."`);
+                    newLines.push(originalLines[i]);
                 }
             }
         }
         
         // Fallback if parsing failed completely (e.g. AI output garbage)
         if (newLines.length === 0 && originalLines.length > 0) {
-            // Try to at least return original lines to avoid data loss
+            console.error('[LinguaSync] ❌ AI segmentation parsing completely failed, using original lines');
             return originalLines;
         }
         
+        console.log(`[LinguaSync] ✅ Parsed ${newLines.length} segments from ${originalLines.length} original lines`);
         return newLines;
+    }
+
+    /**
+     * Clean subtitle text: remove [Music], [Applause], etc.
+     */
+    private cleanText(text: string): string {
+        if (!text) return '';
+        
+        return text
+            .replace(/\[Music\]/gi, '')
+            .replace(/\[Applause\]/gi, '')
+            .replace(/\[Laughter\]/gi, '')
+            .replace(/\[Background Music\]/gi, '')
+            .replace(/\[Sound\]/gi, '')
+            .replace(/\[Noise\]/gi, '')
+            .replace(/\[.*?\]/g, '')
+            .replace(/\\n/g, ' ')      // Replace literal \n with space
+            .replace(/\s+/g, ' ')       // Collapse multiple spaces
+            .trim();
     }
 
     /**
@@ -346,8 +508,8 @@ Output:`;
     async formatTranscript(lines: TranscriptLine[], customPrompt?: string): Promise<string> {
         console.log('[LinguaSync] Starting AI text formatting (punctuation & paragraphs)...');
         
-        // 将所有行合并成一个长文本
-        const rawText = lines.map(line => line.text).join(' ');
+        // 将所有行合并成一个长文本，并清理标记
+        const rawText = lines.map(line => this.cleanText(line.text)).filter(t => t.length > 0).join(' ');
         
         // 分批处理，每批大约2000字符
         const maxChunkSize = 2000;
@@ -376,9 +538,10 @@ Output:`;
             const formatted = await this.formatTextChunk(chunks[i], customPrompt);
             formattedChunks.push(formatted);
             
-            // 避免API限流
+            // 避免API限流 - 增加延迟到3.5秒
             if (i < chunks.length - 1) {
-                await this.sleep(500);
+                console.log('[LinguaSync] Waiting 3.5s before next chunk to avoid rate limit...');
+                await this.sleep(3500);
             }
         }
         

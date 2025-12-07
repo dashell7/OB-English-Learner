@@ -24,6 +24,7 @@ export interface VideoData {
     translatedTranscript?: TranscriptLine[];  // For bilingual support
     refinedTranscript?: TranscriptLine[];     // AI segmented & punctuated transcript
     refinedTranslatedTranscript?: TranscriptLine[]; // Translated version of refined transcript
+    formattedTranscriptText?: string;  // AI formatted text for article content (with punctuation & paragraphs)
 }
 
 export interface LinguaSyncSettings {
@@ -58,6 +59,7 @@ export interface LinguaSyncSettings {
     audioFolder: string;
     audioFormat: 'wav' | 'webm' | 'mp3';
     audioFilenameTemplate: string;
+    recordOnlyMode: boolean;  // 只录音不转录模式
     // Text to Speech
     enableTTS: boolean;
     ttsProvider: 'openai' | 'azure' | 'elevenlabs' | 'gemini' | 'custom';
@@ -70,7 +72,7 @@ export interface LinguaSyncSettings {
     // TTS Advanced
     ttsShowPlayer: 'always' | 'auto' | 'never';
     ttsAutoscroll: boolean;
-    ttsCacheType: 'local' | 'vault';
+    ttsCacheType: 'none' | 'local' | 'vault';
     ttsCacheDuration: number; // hours
     ttsAudioFolder: string;
     ttsChunking: 'sentence' | 'paragraph';
