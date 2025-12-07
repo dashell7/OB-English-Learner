@@ -1,4 +1,4 @@
-# OB English Learner v1.0.2
+# OB English Learner v1.12.0
 
 ## 🎉 Features
 
@@ -38,7 +38,7 @@
 
 ## 📦 Installation
 
-1. 下载 \ob-english-learner-1.0.2.zip\
+1. 下载 \ob-english-learner-1.12.0.zip\
 2. 解压�?Obsidian vault �?\.obsidian/plugins/ob-english-learner/\ 目录
 3. 重启 Obsidian
 4. 在设置中启用插件
