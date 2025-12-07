@@ -1,0 +1,10 @@
+{
+	"id": "ob-english-learner",
+	"name": "OB English Learner",
+	"version": "1.12.0",
+	"minAppVersion": "0.15.0",
+	"description": "YouTube language learning system with automatic transcript fetching, SRT generation, and Bases integration.",
+	"author": "Your Name",
+	"authorUrl": "https://github.com/yourusername",
+	"isDesktopOnly": false
+}
