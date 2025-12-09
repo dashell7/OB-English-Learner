@@ -75,6 +75,18 @@ A comprehensive Obsidian plugin designed for language learners, featuring automa
 - **Organized Structure**: Automatically creates folders and manages assets
 - **Update Mode**: Modify and regenerate notes without losing manual edits
 
+### ⌨️ Keyboard Shortcuts
+- **Video Import**: `Ctrl/Cmd+Shift+Y` - Quick YouTube import
+- **Voice Recording**: `Ctrl/Cmd+Shift+R` - Start voice recording
+- **TTS Play/Pause**: `Ctrl/Cmd+Space` - Toggle TTS playback
+- **TTS Play Selection**: `Ctrl/Cmd+Shift+P` - Play selected text
+- **Export Audio**: `Ctrl/Cmd+Shift+E` - Export selection as audio
+- **Navigation**: `Ctrl/Cmd+←/→` - Previous/Next sentence
+- **Speed Control**: `Ctrl/Cmd+↑/↓` - Increase/Decrease speed
+- **Stop TTS**: `Escape` - Stop playback
+
+📖 **[Full Shortcuts Guide](KEYBOARD_SHORTCUTS.md)** - Complete list with customization tips
+
 ## 📦 Installation
 
 ### From GitHub Releases (Recommended)
