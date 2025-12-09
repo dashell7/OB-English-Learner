@@ -1136,24 +1136,43 @@ export default class LinguaSyncPlugin extends Plugin {
 				baseUrl: this.settings.aiBaseUrl
 			});
 
-			let aiResponse = '';
-
-			// Call AI with streaming - accumulate response
-			await translator.callAIStream(processedContent, (chunk) => {
-				aiResponse += chunk;
-			});
+			// Prepare initial output: original text + separator
+			const initialOutput = `${selection}\n\n`;
 			
-			// Trim final response
-			aiResponse = aiResponse.trim();
+			// Get cursor position
+			const cursorStart = editor.getCursor();
 			
-			// Hide loading notice
+			// Replace selection with original text + newlines
+			editor.replaceSelection(initialOutput);
+			
+			// Move cursor to end of inserted text
+			const doc = editor.getDoc();
+			const insertedLines = initialOutput.split('\n').length - 1;
+			const newCursor = {
+				line: cursorStart.line + insertedLines,
+				ch: 0
+			};
+			editor.setCursor(newCursor);
+			
+			// Hide loading notice now that we're streaming
 			loadingNotice.hide();
-			
-			// Format output: Original Text + blank line + AI response
-			const formattedOutput = `**Original Text:**\n${selection}\n\n${aiResponse}`;
-			
-			// Replace the selection with formatted output
-			editor.replaceSelection(formattedOutput);
+			new Notice(`🤖 ${command.title} streaming...`);
+
+			// Stream AI response and insert in real-time
+			await translator.callAIStream(processedContent, (chunk) => {
+				// Insert chunk at current cursor position
+				const cursor = editor.getCursor();
+				editor.replaceRange(chunk, cursor);
+				
+				// Move cursor to end of inserted chunk
+				const lines = chunk.split('\n');
+				const lastLineLength = lines[lines.length - 1].length;
+				const newPos = {
+					line: cursor.line + lines.length - 1,
+					ch: lines.length === 1 ? cursor.ch + lastLineLength : lastLineLength
+				};
+				editor.setCursor(newPos);
+			});
 			
 			// Show success notice
 			new Notice(`✅ ${command.title} completed`);
