@@ -416,8 +416,8 @@ export default class LinguaSyncPlugin extends Plugin {
 				
 				if (contextMenuCommands.length > 0) {
 					menu.addItem((item) => {
-						item.setTitle('⚡ OB-English-Learner');
-						item.setIcon('zap');
+						item.setTitle('English Learner');
+						item.setIcon('languages');
 						
 						// Create submenu
 						(item as any).setSubmenu();
