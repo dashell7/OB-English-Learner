@@ -109,6 +109,7 @@ export class CustomCommandManager {
 
     /**
      * Parse command file (Markdown with frontmatter)
+     * Supports both Copilot and LinguaSync formats
      */
     private parseCommandFile(title: string, content: string): CustomCommand | null {
         try {
@@ -139,14 +140,31 @@ export class CustomCommandManager {
                 promptContent = content.substring(frontmatterMatch[0].length).trim();
             }
 
+            // Support both Copilot and LinguaSync frontmatter formats
+            const showInContextMenu = frontmatter.showInContextMenu ?? 
+                                     frontmatter['copilot-command-context-menu-enabled'] ?? 
+                                     true;
+            const showInSlashMenu = frontmatter.showInSlashMenu ?? 
+                                   frontmatter['copilot-command-slash-enabled'] ?? 
+                                   true;
+            const order = frontmatter.order ?? 
+                         frontmatter['copilot-command-context-menu-order'] ?? 
+                         0;
+            const modelKey = frontmatter.modelKey ?? 
+                            frontmatter['copilot-command-model-key'] ?? 
+                            '';
+            const lastUsedMs = frontmatter.lastUsedMs ?? 
+                              frontmatter['copilot-command-last-used'] ?? 
+                              Date.now();
+
             return {
                 title,
                 content: promptContent,
-                showInContextMenu: frontmatter.showInContextMenu !== false,
-                showInSlashMenu: frontmatter.showInSlashMenu !== false,
-                order: frontmatter.order || 0,
-                modelKey: frontmatter.modelKey || '',
-                lastUsedMs: frontmatter.lastUsedMs || Date.now()
+                showInContextMenu,
+                showInSlashMenu,
+                order,
+                modelKey,
+                lastUsedMs
             };
         } catch (err) {
             console.error(`Failed to parse command file ${title}:`, err);
