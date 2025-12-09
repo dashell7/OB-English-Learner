@@ -1109,6 +1109,11 @@ export default class LinguaSyncPlugin extends Plugin {
 		// Get the selected text or use empty string
 		const selection = editor.getSelection() || '';
 		
+		if (!selection) {
+			new Notice('⚠️ Please select some text first');
+			return;
+		}
+		
 		// Execute command to get processed content
 		const processedContent = this.customCommandManager.executeCommand(command.title, selection);
 		
@@ -1144,13 +1149,16 @@ export default class LinguaSyncPlugin extends Plugin {
 			// Hide loading notice
 			loadingNotice.hide();
 			
-			// Insert AI response at cursor position (replaces selection if any)
-			editor.replaceSelection(aiResponse);
+			// Format output: Original Text + blank line + AI response
+			const formattedOutput = `**Original Text:**\n${selection}\n\n${aiResponse}`;
+			
+			// Replace the selection with formatted output
+			editor.replaceSelection(formattedOutput);
 			
 			// Show success notice
 			new Notice(`✅ ${command.title} completed`);
 
-		} catch (error) {
+		} catch (error: any) {
 			console.error('AI generation error:', error);
 			loadingNotice.hide();
 			new Notice(`❌ Error: ${error.message}`);
