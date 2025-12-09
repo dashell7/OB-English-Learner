@@ -411,6 +411,12 @@ class TTSToolbarView {
         }
         
         try {
+            // 🔧 FIX: Clear editor selection first to avoid green selection box
+            // This ensures only the TTS highlight (pink) is visible
+            this.view.dispatch({
+                selection: { anchor: toOffset, head: toOffset }  // Move cursor to end of chunk
+            });
+            
             // Apply highlight using CodeMirror decorations
             console.log('[TTS Toolbar] ✨ Applying highlight...');
             highlightRange(this.view, fromOffset, toOffset);
