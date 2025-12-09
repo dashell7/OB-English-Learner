@@ -403,39 +403,55 @@ export default class LinguaSyncPlugin extends Plugin {
 				}
 
 				// Add Custom Commands submenu
+				console.log('[LinguaSync] Editor menu triggered');
+				
 				if (!this.customCommandManager) {
-					console.warn('[LinguaSync] customCommandManager not initialized');
+					console.error('[LinguaSync] ❌ customCommandManager is NULL or undefined!');
+					new Notice('⚠️ Custom Commands not initialized. Please reload the plugin.');
 					return;
 				}
 				
+				console.log('[LinguaSync] ✅ customCommandManager exists');
+				
 				const contextMenuCommands = this.customCommandManager.getContextMenuCommands();
-				console.log('[LinguaSync] Right-click menu: found', contextMenuCommands.length, 'commands');
+				console.log('[LinguaSync] Context menu commands:', contextMenuCommands);
+				console.log('[LinguaSync] Found', contextMenuCommands.length, 'commands');
 				
 				if (contextMenuCommands.length > 0) {
+					console.log('[LinguaSync] Adding menu item...');
 					menu.addItem((item) => {
 						item.setTitle('⚡ LinguaSync Commands');
 						item.setIcon('zap');
+						
+						console.log('[LinguaSync] Menu item added, creating submenu...');
 						
 						// Create submenu
 						(item as any).setSubmenu();
 						const submenu = (item as any).submenu;
 						
 						if (!submenu) {
-							console.error('[LinguaSync] Failed to create submenu');
+							console.error('[LinguaSync] ❌ Failed to create submenu');
 							return;
 						}
 						
+						console.log('[LinguaSync] ✅ Submenu created, adding', contextMenuCommands.length, 'commands');
+						
 						// Add each custom command to submenu
-						contextMenuCommands.forEach(command => {
+						contextMenuCommands.forEach((command, index) => {
+							console.log(`[LinguaSync] Adding command ${index + 1}:`, command.title);
 							submenu.addItem((subItem: any) => {
 								subItem.setTitle(command.title).onClick(async () => {
+									console.log('[LinguaSync] Executing command:', command.title);
 									await this.executeCustomCommand(command, editor);
 								});
 							});
 						});
+						
+						console.log('[LinguaSync] ✅ All commands added to submenu');
 					});
 				} else {
-					console.log('[LinguaSync] No commands to show in context menu');
+					console.warn('[LinguaSync] ⚠️ No commands to show in context menu (length = 0)');
+					console.log('[LinguaSync] All commands:', this.customCommandManager.getAllCommands());
 				}
 			})
 		);
