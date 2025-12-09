@@ -184,6 +184,7 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.addCommand({
 			id: 'start-voice-recording',
 			name: 'Start Voice Recording',
+			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'r' }],
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				this.startRecording(editor, view);
 			}
@@ -290,6 +291,7 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.addCommand({
 			id: 'tts-play-selection',
 			name: 'Aloud: Play selection',
+			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'p' }],
 			editorCallback: (editor: Editor) => {
 				this.speakSelection(editor);
 			}
@@ -325,6 +327,7 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.addCommand({
 			id: 'tts-export-selection',
 			name: 'Aloud: Export selection to audio',
+			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'e' }],
 			editorCallback: async (editor: Editor) => {
 				const text = editor.getSelection();
 				if (text) {
@@ -445,6 +448,7 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.addCommand({
 			id: 'import-youtube-video',
 			name: 'Import YouTube Video',
+			hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'y' }],
 			callback: () => {
 				new YouTubeInputModal(this.app, async (url) => {
 					await this.importVideo(url);
