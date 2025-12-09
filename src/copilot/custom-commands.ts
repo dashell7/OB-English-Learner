@@ -113,8 +113,6 @@ export class CustomCommandManager {
      */
     private parseCommandFile(title: string, content: string): CustomCommand | null {
         try {
-            console.log(`[CustomCommandManager] Parsing file: ${title}`);
-            
             // Parse frontmatter
             const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
             let frontmatter: any = {};
@@ -122,7 +120,6 @@ export class CustomCommandManager {
 
             if (frontmatterMatch) {
                 const yamlContent = frontmatterMatch[1];
-                console.log(`[CustomCommandManager] Found frontmatter in ${title}:`, yamlContent);
                 
                 // Simple YAML parser for our use case
                 yamlContent.split('\n').forEach(line => {
@@ -140,12 +137,8 @@ export class CustomCommandManager {
                     }
                 });
                 
-                console.log(`[CustomCommandManager] Parsed frontmatter for ${title}:`, frontmatter);
-                
                 // Extract content after frontmatter
                 promptContent = content.substring(frontmatterMatch[0].length).trim();
-            } else {
-                console.log(`[CustomCommandManager] No frontmatter found in ${title}`);
             }
 
             // Support both Copilot and LinguaSync frontmatter formats
@@ -165,7 +158,7 @@ export class CustomCommandManager {
                               frontmatter['copilot-command-last-used'] ?? 
                               Date.now();
 
-            const command = {
+            return {
                 title,
                 content: promptContent,
                 showInContextMenu,
@@ -174,17 +167,8 @@ export class CustomCommandManager {
                 modelKey,
                 lastUsedMs
             };
-            
-            console.log(`[CustomCommandManager] ✅ Parsed command ${title}:`, {
-                showInContextMenu,
-                showInSlashMenu,
-                order,
-                contentLength: promptContent.length
-            });
-
-            return command;
         } catch (err) {
-            console.error(`[CustomCommandManager] ❌ Failed to parse command file ${title}:`, err);
+            console.error(`[CustomCommandManager] Failed to parse command file ${title}:`, err);
             return null;
         }
     }
