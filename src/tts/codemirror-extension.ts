@@ -290,27 +290,25 @@ class TTSToolbarView {
             const selection = state.selection.main;
             
             let text: string;
-            let from: any;
-            let to: any;
+            let fromOffset: number;
+            let toOffset: number;
             
             if (selection.empty) {
                 // Play whole document
                 text = state.doc.toString();
-                from = { line: 0, ch: 0 };
-                to = { line: state.doc.lines - 1, ch: state.doc.line(state.doc.lines).length };
+                fromOffset = 0;
+                toOffset = state.doc.length;
             } else {
                 // Play selection
                 text = state.sliceDoc(selection.from, selection.to);
-                const fromLine = state.doc.lineAt(selection.from);
-                const toLine = state.doc.lineAt(selection.to);
-                from = { line: fromLine.number - 1, ch: selection.from - fromLine.from };
-                to = { line: toLine.number - 1, ch: selection.to - toLine.from };
+                fromOffset = selection.from;  // 🔧 FIX: Use CodeMirror offset directly
+                toOffset = selection.to;      // 🔧 FIX: Use CodeMirror offset directly
             }
             
-            // Get Obsidian editor (hack)
-            const editor = (this.view as any).editor || this.createDummyEditor();
+            console.log('[TTS Toolbar] Playing text:', text.substring(0, 50), `offset: ${fromOffset}-${toOffset}`);
             
-            this.ttsManager.playSelection(text, editor, from, to);
+            // 🔧 FIX: Pass offsets directly instead of EditorPosition
+            this.ttsManager.playSelectionWithOffsets(text, this.view, fromOffset, toOffset);
         }
     }
 

@@ -76,20 +76,20 @@ export interface LinguaSyncSettings {
     ttsCacheDuration: number; // hours
     ttsAudioFolder: string;
     ttsChunking: 'sentence' | 'paragraph';
+    // Vault QA (Learning Assistant)
+    enableVaultQA: boolean;
+    qaSearchFolders: string[];  // Folders to search (e.g., ['01-Videos', '02-Subtitles'])
+    qaExcludeFolders: string[]; // Folders to exclude (e.g., ['.obsidian', '03-Recordings'])
+    qaMaxSources: number;       // Maximum number of source notes to include
+    // Custom Commands
+    customCommandsFolder: string;  // Folder where custom command files are stored
+    customCommandTemplating: boolean;  // Enable variable templating
+    customCommandSortStrategy: 'recency' | 'alphabetical' | 'order';  // Sort strategy
+    customCommands: CustomCommand[];  // List of custom commands
     // Template
     noteTemplate: string;
     // Account / Credentials
     credentials: Credential[];
-    // Custom Commands
-    customCommandsFolder: string;
-    customCommandTemplating: boolean;
-    customCommandSortStrategy: 'recency' | 'alphabetical' | 'order';
-    customCommands: CustomCommand[];
-    // Vault QA
-    enableVaultQA: boolean;
-    qaSearchFolders: string[];
-    qaExcludeFolders: string[];
-    qaMaxSources: number;
 }
 
 export interface Credential {

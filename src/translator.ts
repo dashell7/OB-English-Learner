@@ -142,8 +142,9 @@ ${texts}
 
     /**
      * 调用AI API (with retry logic for rate limits)
+     * Exported as public to allow external usage (e.g., custom commands)
      */
-    private async callAI(prompt: string, retries: number = 5): Promise<string> {
+    async callAI(prompt: string, retries: number = 5): Promise<string> {
         const { provider, apiKey, model, baseUrl } = this.config;
 
         for (let attempt = 0; attempt < retries; attempt++) {
@@ -175,6 +176,137 @@ ${texts}
         }
 
         throw new Error('API call failed after retries');
+    }
+
+    /**
+     * 调用AI API with streaming (流式响应)
+     * @param prompt The prompt to send
+     * @param onChunk Callback for each chunk of response
+     */
+    async callAIStream(prompt: string, onChunk: (chunk: string) => void): Promise<string> {
+        const { provider, apiKey, model, baseUrl } = this.config;
+
+        if (provider === 'openai' || provider === 'deepseek' || provider === 'siliconflow' || provider === 'videocaptioner' || provider === 'custom') {
+            return await this.callOpenAICompatibleStream(prompt, apiKey, model, baseUrl, onChunk);
+        } else if (provider === 'gemini') {
+            // Gemini doesn't support streaming in the same way, fallback to non-streaming
+            const response = await this.callGemini(prompt, apiKey, model);
+            onChunk(response);
+            return response;
+        }
+
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+
+    /**
+     * 调用OpenAI兼容的API with streaming
+     */
+    private async callOpenAICompatibleStream(
+        prompt: string,
+        apiKey: string,
+        model?: string,
+        baseUrl?: string,
+        onChunk?: (chunk: string) => void
+    ): Promise<string> {
+        if (!apiKey || !apiKey.trim()) {
+            throw new Error('API key is required but not provided or is empty');
+        }
+
+        let defaultBaseUrl = 'https://api.openai.com/v1/chat/completions';
+        if (this.config.provider === 'deepseek') {
+            defaultBaseUrl = 'https://api.deepseek.com/v1/chat/completions';
+        } else if (this.config.provider === 'siliconflow') {
+            defaultBaseUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+        } else if (this.config.provider === 'videocaptioner') {
+            defaultBaseUrl = 'https://api.videocaptioner.cn/v1/chat/completions';
+        }
+
+        const url = baseUrl || defaultBaseUrl;
+
+        let defaultModel = 'gpt-4o-mini';
+        if (this.config.provider === 'deepseek') {
+            defaultModel = 'deepseek-chat';
+        } else if (this.config.provider === 'siliconflow') {
+            defaultModel = 'deepseek-ai/DeepSeek-V3';
+        } else if (this.config.provider === 'videocaptioner') {
+            defaultModel = 'gpt-4.1-mini';
+        }
+
+        const requestBody = {
+            model: model || defaultModel,
+            messages: [
+                {
+                    role: 'system',
+                    content: '你是一个专业的英中翻译助手。'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            temperature: 0.3,
+            max_tokens: 4000,
+            stream: true  // Enable streaming
+        };
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey.trim()}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API error (${response.status}): ${errorText}`);
+            }
+
+            if (!response.body) {
+                throw new Error('Response body is null');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+
+                        try {
+                            const parsed = JSON.parse(data);
+                            const content = parsed.choices?.[0]?.delta?.content;
+                            if (content) {
+                                fullResponse += content;
+                                if (onChunk) {
+                                    onChunk(content);
+                                }
+                            }
+                        } catch (e) {
+                            // Skip invalid JSON
+                            console.warn('Failed to parse streaming chunk:', e);
+                        }
+                    }
+                }
+            }
+
+            return fullResponse;
+
+        } catch (error) {
+            console.error('[LinguaSync] Streaming API call failed:', error);
+            throw error;
+        }
     }
 
     /**

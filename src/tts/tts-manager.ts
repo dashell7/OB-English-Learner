@@ -136,6 +136,16 @@ export class TTSManager {
         }
     }
 
+    chunkTextWithOffsets(text: string, fromOffset: number, toOffset: number): TTSChunk[] {
+        const chunkingMode = this.settings.ttsChunking || 'sentence';
+        
+        if (chunkingMode === 'paragraph') {
+            return this.chunkByParagraphWithOffsets(text, fromOffset);
+        } else {
+            return this.chunkBySentenceWithOffsets(text, fromOffset);
+        }
+    }
+
     private chunkBySentence(text: string, editor: Editor, from: EditorPosition, to: EditorPosition): TTSChunk[] {
         // Split by sentence boundaries (., !, ?, etc.)
         const sentenceRegex = /[^.!?]+[.!?]+/g;
@@ -180,6 +190,49 @@ export class TTSManager {
         return chunks;
     }
 
+    private chunkBySentenceWithOffsets(text: string, baseOffset: number): TTSChunk[] {
+        // Split by sentence boundaries (., !, ?, etc.)
+        const sentenceRegex = /[^.!?]+[.!?]+/g;
+        const sentences = text.match(sentenceRegex) || [text];
+        
+        const chunks: TTSChunk[] = [];
+        let offset = 0; // Offset within the selected text
+        
+        for (const sentence of sentences) {
+            const trimmed = sentence.trim();
+            if (trimmed.length === 0) {
+                offset += sentence.length;
+                continue;
+            }
+            
+            // Find the actual start position of this sentence in the selected text
+            const sentenceStart = text.indexOf(sentence, offset);
+            const trimStart = sentenceStart + (sentence.length - sentence.trimStart().length);
+            const trimEnd = trimStart + trimmed.length;
+            
+            // 🔧 FIX: Calculate absolute offsets directly
+            const startOffset = baseOffset + trimStart;
+            const endOffset = baseOffset + trimEnd;
+            
+            // Only add chunk if it has valid range
+            if (endOffset > startOffset) {
+                chunks.push({
+                    text: trimmed,
+                    start: startOffset,
+                    end: endOffset
+                });
+                console.log('[TTSManager] Chunk:', trimmed.substring(0, 30) + '...', `(${startOffset}-${endOffset})`);
+            } else {
+                console.warn('[TTSManager] Skipping empty chunk:', trimmed);
+            }
+            
+            offset = sentenceStart + sentence.length;
+        }
+        
+        console.log('[TTSManager] Created', chunks.length, 'chunks with baseOffset:', baseOffset);
+        return chunks;
+    }
+
     private chunkByParagraph(text: string, editor: Editor, from: EditorPosition, to: EditorPosition): TTSChunk[] {
         const paragraphs = text.split(/\n\n+/);
         const chunks: TTSChunk[] = [];
@@ -216,6 +269,43 @@ export class TTSManager {
         return chunks;
     }
 
+    private chunkByParagraphWithOffsets(text: string, baseOffset: number): TTSChunk[] {
+        const paragraphs = text.split(/\n\n+/);
+        const chunks: TTSChunk[] = [];
+        let offset = 0;
+        
+        for (const para of paragraphs) {
+            const trimmed = para.trim();
+            if (trimmed.length === 0) {
+                offset += para.length + 2; // +2 for \n\n
+                continue;
+            }
+            
+            // Find the actual start position
+            const paraStart = text.indexOf(para, offset);
+            const trimStart = paraStart + (para.length - para.trimStart().length);
+            const trimEnd = trimStart + trimmed.length;
+            
+            // 🔧 FIX: Calculate absolute offsets directly
+            const startOffset = baseOffset + trimStart;
+            const endOffset = baseOffset + trimEnd;
+            
+            // Only add chunk if it has valid range
+            if (endOffset > startOffset) {
+                chunks.push({
+                    text: trimmed,
+                    start: startOffset,
+                    end: endOffset
+                });
+            }
+            
+            offset = paraStart + para.length;
+        }
+        
+        console.log('[TTSManager] Created', chunks.length, 'paragraphs with baseOffset:', baseOffset);
+        return chunks;
+    }
+
     // ====================== Playback Control ======================
 
     async playSelection(text: string, editor: Editor, from: EditorPosition, to: EditorPosition): Promise<void> {
@@ -244,6 +334,32 @@ export class TTSManager {
         await this.playCurrentChunk();
     }
 
+    async playSelectionWithOffsets(text: string, view: any, fromOffset: number, toOffset: number): Promise<void> {
+        // Stop any current playback
+        this.stop();
+        
+        // Chunk the text using direct offsets
+        this.chunks = this.chunkTextWithOffsets(text, fromOffset, toOffset);
+        
+        if (this.chunks.length === 0) {
+            new Notice('No text to speak');
+            return;
+        }
+        
+        // User-friendly notification
+        const sentenceWord = this.chunks.length === 1 ? 'sentence' : 'sentences';
+        new Notice(`🔊 Playing ${this.chunks.length} ${sentenceWord}`);
+        
+        // Update Media Session metadata
+        this.updateMediaSessionMetadata(text);
+        
+        this.currentChunkIndex = 0;
+        this.editor = null; // Not using Editor API
+        this.setState('loading');
+        
+        await this.playCurrentChunk();
+    }
+
     async playCurrentChunk(): Promise<void> {
         if (this.currentChunkIndex < 0 || this.currentChunkIndex >= this.chunks.length) {
             console.error('[TTS] Invalid chunk index:', this.currentChunkIndex);
@@ -254,11 +370,14 @@ export class TTSManager {
         const chunk = this.chunks[this.currentChunkIndex];
         console.log('[TTS] Playing chunk:', this.currentChunkIndex, '/', this.chunks.length, chunk.text.substring(0, 50));
         
+        // 🔧 FIX: Notify chunk change BEFORE playing, so highlight is in sync
+        // This ensures the highlight shows the current chunk being played
+        this.notifyChunkChange();
+        
         // Preload next 2-3 chunks in background
         this.preloadNextChunks();
         
         this.setState('loading');
-        this.notifyChunkChange();
         
         try {
             // Try to use preloaded audio first
@@ -277,13 +396,15 @@ export class TTSManager {
             if (this.currentState !== 'idle') {
                 this.currentChunkIndex++;
                 
-                // Check if we've reached the end BEFORE notifying
+                // Check if we've reached the end
                 if (this.currentChunkIndex >= this.chunks.length) {
                     this.stop();
                     return;
                 }
                 
-                this.notifyChunkChange();
+                // 🔧 FIX: Do NOT notify here - let playCurrentChunk() handle it
+                // This avoids duplicate notifications and ensures sync
+                
                 // Immediately play next chunk (no await for state change)
                 this.playCurrentChunk(); // Fire and forget for seamless playback
             }

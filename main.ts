@@ -2,7 +2,7 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 import { YouTubeScraper } from './src/scraper';
 import { NoteGenerator } from './src/generator';
 import { BasesIntegration } from './src/bases';
-import { LinguaSyncSettings } from './src/types';
+import { LinguaSyncSettings, CustomCommand } from './src/types';
 import { ProgressNotice } from './src/progress-notice';
 import { PasswordManagerModal } from './src/password-manager';
 import { AudioRecorder } from './src/voice/audio-recorder';
@@ -10,6 +10,9 @@ import { TranscriptionService } from './src/voice/transcription-service';
 import { RecordingModal } from './src/voice/recording-modal';
 import { TTSManager } from './src/tts/tts-manager';
 import { ttsPanelExtension } from './src/tts/codemirror-extension';
+import { CustomCommandManager } from './src/copilot/custom-commands';
+import { CustomCommandSettingsUI } from './src/copilot/command-settings-ui';
+import { CustomCommandAIModal } from './src/copilot/custom-command-ai-modal';
 
 const DEFAULT_TEMPLATE = `---
 title: {{title}}
@@ -111,6 +114,7 @@ export default class LinguaSyncPlugin extends Plugin {
 	recorder: AudioRecorder;
 	transcriptionService: TranscriptionService;
     ttsManager: TTSManager;
+	customCommandManager: CustomCommandManager;
 	statusBarItem: HTMLElement;
 	isRecording: boolean = false;
 	recordingModal: RecordingModal | null = null;
@@ -123,6 +127,9 @@ export default class LinguaSyncPlugin extends Plugin {
 		this.transcriptionService = new TranscriptionService(this.settings);
         this.ttsManager = new TTSManager(this.app, this.settings);
         this.registerEditorExtension(ttsPanelExtension(this.ttsManager));
+		this.customCommandManager = new CustomCommandManager(this.app);
+		// Load custom commands from folder
+		await this.loadCustomCommands();
 
 		// Add ribbon icon
 		this.addRibbonIcon('video', 'Import YouTube Video', () => {
@@ -394,6 +401,42 @@ export default class LinguaSyncPlugin extends Plugin {
 								}
 							});
 					});
+				}
+
+				// Add Custom Commands submenu
+				if (!this.customCommandManager) {
+					console.warn('[LinguaSync] customCommandManager not initialized');
+					return;
+				}
+				
+				const contextMenuCommands = this.customCommandManager.getContextMenuCommands();
+				console.log('[LinguaSync] Right-click menu: found', contextMenuCommands.length, 'commands');
+				
+				if (contextMenuCommands.length > 0) {
+					menu.addItem((item) => {
+						item.setTitle('⚡ LinguaSync Commands');
+						item.setIcon('zap');
+						
+						// Create submenu
+						(item as any).setSubmenu();
+						const submenu = (item as any).submenu;
+						
+						if (!submenu) {
+							console.error('[LinguaSync] Failed to create submenu');
+							return;
+						}
+						
+						// Add each custom command to submenu
+						contextMenuCommands.forEach(command => {
+							submenu.addItem((subItem: any) => {
+								subItem.setTitle(command.title).onClick(async () => {
+									await this.executeCustomCommand(command, editor);
+								});
+							});
+						});
+					});
+				} else {
+					console.log('[LinguaSync] No commands to show in context menu');
 				}
 			})
 		);
@@ -1029,6 +1072,41 @@ export default class LinguaSyncPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		this.transcriptionService.updateSettings(this.settings);
+	}
+
+	async loadCustomCommands() {
+		try {
+			console.log('[Custom Commands] Loading from folder:', this.settings.customCommandsFolder);
+			const commands = await this.customCommandManager.loadCommandsFromFolder(this.settings.customCommandsFolder);
+			console.log('[Custom Commands] Loaded', commands.length, 'commands:', commands.map(c => c.title));
+			this.settings.customCommands = commands;
+			
+			// Update the manager's commands list
+			this.customCommandManager.setCustomCommands(commands);
+		} catch (err) {
+			console.error('Failed to load custom commands:', err);
+			new Notice('⚠️ Failed to load custom commands. Check console for details.');
+		}
+	}
+
+	async executeCustomCommand(command: CustomCommand, editor: any) {
+		// Get the selected text or use empty string
+		const selection = editor.getSelection() || '';
+		
+		// Execute command to get processed content
+		const processedContent = this.customCommandManager.executeCommand(command.title, selection);
+		
+		// Open AI modal - calls AI directly and shows results
+		const modal = new CustomCommandAIModal(
+			this.app, 
+			command.title, 
+			processedContent,
+			selection,
+			this.settings,
+			editor
+		);
+		modal.open();
 	}
 
 	injectStyles() {
@@ -1528,7 +1606,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		return badge;
 	}
 
-	display(): void {
+	async display(): Promise<void> {
 		const { containerEl } = this;
 		containerEl.empty();
 
@@ -1537,12 +1615,13 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 		headerEl.createEl('h1', { text: 'OB English Learner', cls: 'ls-title' });
 		headerEl.createEl('p', { text: 'Import and manage YouTube/Bilibili video transcripts for language learning.', cls: 'ls-subtitle' });
 
-		// Tab Navigation (Reorganized: 4 tabs instead of 6)
+		// Tab Navigation (Reorganized: 5 tabs)
 		const navEl = containerEl.createDiv({ cls: 'ls-tab-nav' });
 		const tabs = [
 			{ id: 'content', label: '📝 Content', labelCn: '内容' },
 			{ id: 'ai', label: '🤖 AI', labelCn: '智能' },
 			{ id: 'audio', label: '🎙️ Audio', labelCn: '音频' },
+			{ id: 'commands', label: '⚡ Commands', labelCn: '命令' },
 			{ id: 'advanced', label: '⚙️ Advanced', labelCn: '高级' }
 		];
 
@@ -1563,6 +1642,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 			case 'content': this.renderContent(contentEl); break;
 			case 'ai': this.renderAI(contentEl); break;
 			case 'audio': this.renderAudio(contentEl); break;
+			case 'commands': await this.renderCommands(contentEl); break;
 			case 'advanced': this.renderAdvanced(contentEl); break;
 			default: 
 				// Redirect old tabs to new structure
@@ -2588,6 +2668,76 @@ class LinguaSyncSettingTab extends PluginSettingTab {
                         this.saveAndNotify();
                     }));
 		}
+	}
+
+	// === Commands Tab ===
+	async renderCommands(container: HTMLElement) {
+		// Load commands first to ensure they are up to date
+		await this.plugin.loadCustomCommands();
+
+		// Custom Commands Card
+		const commandsCard = container.createDiv({ cls: 'ls-card' });
+		commandsCard.createEl('div', { text: '⚡ Custom Commands', cls: 'ls-card-title' });
+
+		// Commands folder setting
+		new Setting(commandsCard)
+			.setName(this.createBilingualLabel('Custom Commands Folder', '自定义命令文件夹'))
+			.setDesc('Folder where custom command files (.md) are stored')
+			.addText(text => {
+				text
+					.setPlaceholder('03-Resources/copilot-custom-prompts')
+					.setValue(this.plugin.settings.customCommandsFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.customCommandsFolder = value;
+						this.debouncedSave();
+						await this.plugin.loadCustomCommands();
+						this.display(); // Refresh UI
+					});
+				// Make input wider to show full path
+				text.inputEl.style.width = '100%';
+				text.inputEl.style.minWidth = '400px';
+			});
+
+		// Templating setting
+		new Setting(commandsCard)
+			.setName(this.createBilingualLabel('Custom Prompt Templating', '提示词模板化'))
+			.setDesc('Process {{selection}} variable in prompts')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.customCommandTemplating)
+				.onChange(async (value) => {
+					this.plugin.settings.customCommandTemplating = value;
+					this.saveAndNotify();
+				}));
+
+		// Sort strategy
+		new Setting(commandsCard)
+			.setName(this.createBilingualLabel('Sort Strategy', '排序策略'))
+			.setDesc('Sort order for commands')
+			.addDropdown(dropdown => dropdown
+				.addOption('recency', 'Recency / 最近使用')
+				.addOption('alphabetical', 'Alphabetical / 字母顺序')
+				.addOption('order', 'Manual / 手动排序')
+				.setValue(this.plugin.settings.customCommandSortStrategy)
+				.onChange(async (value: any) => {
+					this.plugin.settings.customCommandSortStrategy = value;
+					this.saveAndNotify();
+				}));
+
+		// Commands UI
+		const commandsUIContainer = commandsCard.createDiv({ cls: 'custom-commands-ui-container' });
+		commandsUIContainer.style.marginTop = '20px';
+
+		const commandsUI = new CustomCommandSettingsUI(
+			commandsUIContainer,
+			this.app,
+			this.plugin.settings.customCommands || [],
+			this.plugin.customCommandManager,
+			this.plugin.settings.customCommandsFolder,
+			async () => {
+				await this.plugin.loadCustomCommands();
+			}
+		);
+		commandsUI.render();
 	}
 
 	// === Advanced Tab (Template + Account) ===
