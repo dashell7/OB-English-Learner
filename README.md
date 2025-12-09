@@ -87,6 +87,15 @@ A comprehensive Obsidian plugin designed for language learners, featuring automa
 
 📖 **[Full Shortcuts Guide](KEYBOARD_SHORTCUTS.md)** - Complete list with customization tips
 
+### 🎯 Ribbon Quick Action Button
+- **Customizable Button**: Add a quick action button to the left ribbon bar
+- **6 Available Commands**: Voice Recording, YouTube Import, TTS Play, TTS Export, etc.
+- **One-Click Access**: Execute your most-used command instantly
+- **Auto-Matching Icons**: Button icon changes based on selected command
+- **Easy Configuration**: Switch commands anytime in Settings → Commands tab
+
+📖 **[Ribbon Button Guide](RIBBON_BUTTON_GUIDE.md)** - Setup and usage instructions
+
 ## 📦 Installation
 
 ### From GitHub Releases (Recommended)
