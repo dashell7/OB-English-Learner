@@ -420,7 +420,7 @@ export default class LinguaSyncPlugin extends Plugin {
 				if (contextMenuCommands.length > 0) {
 					console.log('[LinguaSync] Adding menu item...');
 					menu.addItem((item) => {
-						item.setTitle('⚡ LinguaSync Commands');
+						item.setTitle('⚡ OB-English-Learner');
 						item.setIcon('zap');
 						
 						console.log('[LinguaSync] Menu item added, creating submenu...');
