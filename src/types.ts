@@ -80,6 +80,16 @@ export interface LinguaSyncSettings {
     noteTemplate: string;
     // Account / Credentials
     credentials: Credential[];
+    // Custom Commands
+    customCommandsFolder: string;
+    customCommandTemplating: boolean;
+    customCommandSortStrategy: 'recency' | 'alphabetical' | 'order';
+    customCommands: CustomCommand[];
+    // Vault QA
+    enableVaultQA: boolean;
+    qaSearchFolders: string[];
+    qaExcludeFolders: string[];
+    qaMaxSources: number;
 }
 
 export interface Credential {
@@ -89,4 +99,15 @@ export interface Credential {
     url: string;
     username: string;
     password: string;
+}
+
+// Custom Commands
+export interface CustomCommand {
+    title: string;
+    content: string;
+    showInContextMenu?: boolean;
+    showInSlashMenu?: boolean;
+    order?: number;
+    modelKey?: string;
+    lastUsedMs: number;
 }

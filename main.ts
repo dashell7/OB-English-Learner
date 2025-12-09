@@ -92,9 +92,19 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
     ttsChunking: 'sentence',  // 按句子分块
 	// Template
 	noteTemplate: DEFAULT_TEMPLATE,
-	// Account
-	credentials: []
-}
+	// Account / Credentials
+	credentials: [],
+	// Custom Commands
+	customCommandsFolder: '03-Resources/copilot-custom-prompts',
+	customCommandTemplating: true,
+	customCommandSortStrategy: 'recency',
+	customCommands: [],
+	// Vault QA
+	enableVaultQA: false,
+	qaSearchFolders: [],
+	qaExcludeFolders: ['.obsidian'],
+	qaMaxSources: 5,
+};
 
 export default class LinguaSyncPlugin extends Plugin {
 	settings: LinguaSyncSettings;
