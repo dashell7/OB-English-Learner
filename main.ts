@@ -127,8 +127,12 @@ export default class LinguaSyncPlugin extends Plugin {
         this.ttsManager = new TTSManager(this.app, this.settings);
         this.registerEditorExtension(ttsPanelExtension(this.ttsManager));
 		this.customCommandManager = new CustomCommandManager(this.app);
-		// Load custom commands from folder
-		await this.loadCustomCommands();
+		
+		// Load custom commands after workspace is ready
+		this.app.workspace.onLayoutReady(async () => {
+			await this.loadCustomCommands();
+			console.log('[LinguaSync] Custom commands loaded on workspace ready');
+		});
 
 		// Add ribbon icon
 		this.addRibbonIcon('video', 'Import YouTube Video', () => {
