@@ -101,7 +101,7 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	customCommandTemplating: true,
 	customCommandSortStrategy: 'recency',
 	customCommands: [],
-	ribbonCommandId: 'start-voice-recording',  // Default: Voice Recording
+	ribbonCommandId: '',  // Will be set to first custom command on load
 	// Vault QA
 	enableVaultQA: false,
 	qaSearchFolders: [],
@@ -1092,6 +1092,13 @@ export default class LinguaSyncPlugin extends Plugin {
 			
 			// Update the manager's commands list
 			this.customCommandManager.setCustomCommands(commands);
+			
+			// Set default ribbon command to first custom command if not set
+			if (!this.settings.ribbonCommandId && commands.length > 0) {
+				this.settings.ribbonCommandId = `custom-${commands[0].title}`;
+				await this.saveSettings();
+				console.log('[Custom Commands] Set default ribbon command to:', commands[0].title);
+			}
 		} catch (err) {
 			console.error('Failed to load custom commands:', err);
 			new Notice('⚠️ Failed to load custom commands. Check console for details.');
@@ -1150,30 +1157,67 @@ export default class LinguaSyncPlugin extends Plugin {
 		}
 	}
 
-	// Get available commands for Ribbon quick action
+	// Get available commands for Ribbon quick action (Custom Commands)
 	getAvailableCommands(): Array<{id: string, name: string, icon: string}> {
-		return [
-			{ id: 'import-youtube-video', name: 'Import YouTube Video', icon: 'video' },
-			{ id: 'start-voice-recording', name: 'Start Voice Recording', icon: 'microphone' },
-			{ id: 'tts-play-selection', name: 'TTS: Play Selection', icon: 'play' },
-			{ id: 'tts-play-pause', name: 'TTS: Play/Pause', icon: 'play-circle' },
-			{ id: 'tts-export-selection', name: 'TTS: Export to Audio', icon: 'file-audio' },
-			{ id: 'initialize-knowledge-base', name: 'Initialize Knowledge Base', icon: 'database' },
-		];
+		const commands: Array<{id: string, name: string, icon: string}> = [];
+		
+		// Add custom commands if loaded
+		if (this.customCommandManager && this.settings.customCommands) {
+			this.settings.customCommands.forEach(cmd => {
+				commands.push({
+					id: `custom-${cmd.title}`,  // Prefix to identify as custom command
+					name: cmd.title,
+					icon: 'zap'  // Lightning icon for all custom commands
+				});
+			});
+		}
+		
+		// Fallback: if no custom commands, add some default options
+		if (commands.length === 0) {
+			commands.push(
+				{ id: 'import-youtube-video', name: 'Import YouTube Video', icon: 'video' },
+				{ id: 'start-voice-recording', name: 'Start Voice Recording', icon: 'microphone' }
+			);
+		}
+		
+		return commands;
 	}
 
 	// Add customizable Ribbon button based on settings
 	addCustomRibbonButton() {
-		const commandInfo = this.getAvailableCommands().find(
-			cmd => cmd.id === this.settings.ribbonCommandId
-		);
+		const commandId = this.settings.ribbonCommandId;
+		if (!commandId) return;
 
-		if (!commandInfo) return;
-
-		this.addRibbonIcon(commandInfo.icon, `Quick Action: ${commandInfo.name}`, () => {
-			// Execute the command
-			(this.app as any).commands.executeCommandById(commandInfo.id);
-		});
+		// Check if it's a custom command
+		if (commandId.startsWith('custom-')) {
+			const commandTitle = commandId.replace('custom-', '');
+			const command = this.settings.customCommands.find(cmd => cmd.title === commandTitle);
+			
+			if (command) {
+				this.addRibbonIcon('zap', `Quick Action: ${command.title}`, async () => {
+					// Execute custom command
+					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+					if (view && view.editor) {
+						await this.executeCustomCommand(command, view.editor);
+					} else {
+						new Notice('⚠️ Please open a note to use this command');
+					}
+				});
+			}
+		} else {
+			// Fallback: built-in command
+			const builtInCommands = [
+				{ id: 'import-youtube-video', name: 'Import YouTube Video', icon: 'video' },
+				{ id: 'start-voice-recording', name: 'Start Voice Recording', icon: 'microphone' }
+			];
+			
+			const commandInfo = builtInCommands.find(cmd => cmd.id === commandId);
+			if (commandInfo) {
+				this.addRibbonIcon(commandInfo.icon, `Quick Action: ${commandInfo.name}`, () => {
+					(this.app as any).commands.executeCommandById(commandInfo.id);
+				});
+			}
+		}
 	}
 
 	injectStyles() {

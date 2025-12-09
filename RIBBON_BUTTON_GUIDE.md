@@ -19,14 +19,21 @@ Ribbon Quick Action Button 允许你在 Obsidian 左侧工具栏添加一个可�
 
 ## 📋 可用命令列表
 
-| 命令 ID | 命令名称 | 图标 | 说明 |
-|---------|---------|------|------|
-| `import-youtube-video` | Import YouTube Video | 🎥 | 导入 YouTube/Bilibili 视频 |
-| `start-voice-recording` | Start Voice Recording | 🎙️ | 开始语音录音（默认） |
-| `tts-play-selection` | TTS: Play Selection | ▶️ | 朗读选中的文本 |
-| `tts-play-pause` | TTS: Play/Pause | ⏯️ | 播放/暂停 TTS |
-| `tts-export-selection` | TTS: Export to Audio | 🎵 | 导出选中文本为音频 |
-| `initialize-knowledge-base` | Initialize Knowledge Base | 🗄️ | 初始化知识库 |
+**Ribbon 按钮现在支持绑定你的自定义命令（Custom Commands）！**
+
+### 默认的自定义命令
+
+| 命令名称 | 图标 | 说明 |
+|---------|------|------|
+| **口语纠正专家** | ⚡ | AI 纠正口语表达 |
+| **Summarize** | ⚡ | 总结文本 |
+| **Fix Grammar** | ⚡ | 修正语法错误 |
+| **Simplify** | ⚡ | 简化文本 |
+| **Practice Questions** | ⚡ | 生成练习题 |
+| **Explain Idioms** | ⚡ | 解释习语 |
+| **Translate to Chinese** | ⚡ | 翻译成中文 |
+
+> 💡 **所有自定义命令都会显示在下拉列表中！** 你可以选择任何一个命令绑定到 Ribbon 按钮。
 
 ---
 
@@ -57,30 +64,32 @@ Ctrl/Cmd + R  或  Settings → Reload without saving
 
 ## 🎨 使用示例
 
-### 示例 1：绑定"开始录音"
-**适合场景：** 经常需要录音转文字
+### 示例 1：绑定"Translate to Chinese"（翻译成中文）
+**适合场景：** 频繁翻译英文文本
 
-1. 选择 "Start Voice Recording"
+1. 选择 "Translate to Chinese"
 2. 重新加载 Obsidian
-3. 点击 🎙️ 按钮
-4. 开始录音
+3. 选中要翻译的英文
+4. 点击 ⚡ 按钮
+5. AI 翻译自动插入
 
-### 示例 2：绑定"朗读选中文本"
-**适合场景：** 频繁使用 TTS 功能
+### 示例 2：绑定"口语纠正专家"
+**适合场景：** 练习英语口语表达
 
-1. 选择 "TTS: Play Selection"
+1. 选择 "口语纠正专家"
 2. 重新加载 Obsidian
-3. 选中文本
-4. 点击 ▶️ 按钮
-5. 听取朗读
+3. 选中你的英文表达
+4. 点击 ⚡ 按钮
+5. 获取专业纠正建议
 
-### 示例 3：绑定"导入视频"
-**适合场景：** 大量导入 YouTube 视频
+### 示例 3：绑定"Summarize"（总结）
+**适合场景：** 快速总结长文本
 
-1. 选择 "Import YouTube Video"
+1. 选择 "Summarize"
 2. 重新加载 Obsidian
-3. 点击 🎥 按钮
-4. 粘贴 URL
+3. 选中长文本
+4. 点击 ⚡ 按钮
+5. 获取简洁摘要
 
 ---
 
@@ -96,10 +105,11 @@ Ctrl/Cmd + R  或  Settings → Reload without saving
 - 两者配合使用效率更高
 
 ### 推荐配置
-- **语言学习者**: TTS: Play Selection
-- **内容创作者**: Import YouTube Video  
-- **播客记录者**: Start Voice Recording
-- **知识管理者**: Initialize Knowledge Base
+- **语言学习者**: Translate to Chinese（快速翻译）
+- **口语练习者**: 口语纠正专家（纠正表达）
+- **阅读学习者**: Explain Idioms（解释习语）
+- **写作提升者**: Fix Grammar（语法纠正）
+- **内容总结者**: Summarize（快速总结）
 
 ---
 
@@ -112,15 +122,20 @@ Ctrl/Cmd + R  或  Settings → Reload without saving
 - 或手动：Settings → Reload without saving
 
 ### Q: 可以添加更多命令吗？
-**A:** 目前支持 6 个预定义命令。如需添加更多，可以：
-1. 在 GitHub 提交 Issue
-2. 或自行修改代码中的 `getAvailableCommands()` 方法
+**A:** 可以！所有你的自定义命令（Custom Commands）都会自动显示在下拉列表中。你可以：
+1. 在 Settings → Commands 标签页添加新命令
+2. 点击 "Generate Default" 生成默认命令
+3. 或者在 `03-Resources/copilot-custom-prompts` 文件夹中添加 `.md` 文件
 
 ### Q: 按钮图标可以自定义吗？
-**A:** 图标根据命令类型自动匹配，暂不支持手动自定义
+**A:** 所有自定义命令使用统一的 ⚡ 闪电图标，简洁且易识别
 
-### Q: 能添加自定义命令（Custom Commands）吗？
-**A:** 当前版本仅支持插件预定义的命令。Custom Commands 需要通过右键菜单访问。
+### Q: 如何创建自己的命令？
+**A:** 非常简单！
+1. 进入 Settings → Commands 标签页
+2. 点击 "+ Add Cmd" 按钮
+3. 输入命令名称和提示词
+4. 保存后会自动出现在 Ribbon 下拉列表中
 
 ---
 
