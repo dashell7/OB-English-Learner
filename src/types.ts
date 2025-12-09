@@ -86,6 +86,7 @@ export interface LinguaSyncSettings {
     customCommandTemplating: boolean;  // Enable variable templating
     customCommandSortStrategy: 'recency' | 'alphabetical' | 'order';  // Sort strategy
     customCommands: CustomCommand[];  // List of custom commands
+    ribbonCommandId: string;  // Command ID to bind to Ribbon quick action button
     // Template
     noteTemplate: string;
     // Account / Credentials

@@ -101,6 +101,7 @@ const DEFAULT_SETTINGS: LinguaSyncSettings = {
 	customCommandTemplating: true,
 	customCommandSortStrategy: 'recency',
 	customCommands: [],
+	ribbonCommandId: 'start-voice-recording',  // Default: Voice Recording
 	// Vault QA
 	enableVaultQA: false,
 	qaSearchFolders: [],
@@ -140,6 +141,9 @@ export default class LinguaSyncPlugin extends Plugin {
 				await this.importVideo(url);
 			}).open();
 		});
+
+		// Add customizable quick action ribbon button
+		this.addCustomRibbonButton();
 
 		// Add Voice Ribbon Icon
 		this.addRibbonIcon('microphone', 'Start Voice Recording', () => {
@@ -1146,6 +1150,32 @@ export default class LinguaSyncPlugin extends Plugin {
 		}
 	}
 
+	// Get available commands for Ribbon quick action
+	getAvailableCommands(): Array<{id: string, name: string, icon: string}> {
+		return [
+			{ id: 'import-youtube-video', name: 'Import YouTube Video', icon: 'video' },
+			{ id: 'start-voice-recording', name: 'Start Voice Recording', icon: 'microphone' },
+			{ id: 'tts-play-selection', name: 'TTS: Play Selection', icon: 'play' },
+			{ id: 'tts-play-pause', name: 'TTS: Play/Pause', icon: 'play-circle' },
+			{ id: 'tts-export-selection', name: 'TTS: Export to Audio', icon: 'file-audio' },
+			{ id: 'initialize-knowledge-base', name: 'Initialize Knowledge Base', icon: 'database' },
+		];
+	}
+
+	// Add customizable Ribbon button based on settings
+	addCustomRibbonButton() {
+		const commandInfo = this.getAvailableCommands().find(
+			cmd => cmd.id === this.settings.ribbonCommandId
+		);
+
+		if (!commandInfo) return;
+
+		this.addRibbonIcon(commandInfo.icon, `Quick Action: ${commandInfo.name}`, () => {
+			// Execute the command
+			(this.app as any).commands.executeCommandById(commandInfo.id);
+		});
+	}
+
 	injectStyles() {
 		if (document.getElementById('ls-mac-styles')) return;
 		const styleEl = document.createElement('style');
@@ -1286,6 +1316,14 @@ export default class LinguaSyncPlugin extends Plugin {
 				border-bottom: 1px solid var(--background-modifier-border);
 			}
 			.ls-property-row:last-child { border-bottom: none; }
+
+			/* === Info Box === */
+			.ls-info-box {
+				background: var(--background-secondary);
+				border: 1px solid var(--background-modifier-border);
+				border-radius: 8px;
+				padding: 15px;
+			}
 
 			/* === Animations === */
 			@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -2759,6 +2797,43 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					this.plugin.settings.customCommandSortStrategy = value;
 					this.saveAndNotify();
 				}));
+
+		// Ribbon Quick Action Button
+		const ribbonCard = container.createDiv({ cls: 'ls-card' });
+		ribbonCard.createEl('div', { text: '🎯 Quick Action Button', cls: 'ls-card-title' });
+
+		new Setting(ribbonCard)
+			.setName(this.createBilingualLabel('Ribbon Command', 'Ribbon 快捷按钮'))
+			.setDesc('Choose which command to bind to the quick action button in the left ribbon / 选择绑定到左侧工具栏快捷按钮的命令')
+			.addDropdown(dropdown => {
+				// Add available commands
+				const commands = this.plugin.getAvailableCommands();
+				commands.forEach(cmd => {
+					dropdown.addOption(cmd.id, cmd.name);
+				});
+				
+				dropdown.setValue(this.plugin.settings.ribbonCommandId)
+					.onChange(async (value) => {
+						this.plugin.settings.ribbonCommandId = value;
+						await this.plugin.saveSettings();
+						
+						// Show notice to reload
+						new Notice('⚠️ Please reload Obsidian to update the ribbon button / 请重新加载 Obsidian 以更新按钮');
+					});
+			});
+
+		// Info box
+		const infoBox = ribbonCard.createDiv({ cls: 'ls-info-box' });
+		infoBox.style.marginTop = '15px';
+		infoBox.innerHTML = `
+			<div style="display: flex; gap: 10px; align-items: start;">
+				<span style="font-size: 20px;">💡</span>
+				<div style="font-size: 0.9em; color: var(--text-muted);">
+					<strong>Tip:</strong> After changing the ribbon command, reload Obsidian to see the new button.<br>
+					<strong>提示：</strong>更改 Ribbon 命令后，需要重新加载 Obsidian 才能看到新按钮。
+				</div>
+			</div>
+		`;
 
 		// Commands UI
 		const commandsUIContainer = commandsCard.createDiv({ cls: 'custom-commands-ui-container' });
