@@ -12,7 +12,6 @@ import { TTSManager } from './src/tts/tts-manager';
 import { ttsPanelExtension } from './src/tts/codemirror-extension';
 import { CustomCommandManager } from './src/copilot/custom-commands';
 import { CustomCommandSettingsUI } from './src/copilot/command-settings-ui';
-import { CustomCommandAIModal } from './src/copilot/custom-command-ai-modal';
 
 const DEFAULT_TEMPLATE = `---
 title: {{title}}
@@ -1097,16 +1096,49 @@ export default class LinguaSyncPlugin extends Plugin {
 		// Execute command to get processed content
 		const processedContent = this.customCommandManager.executeCommand(command.title, selection);
 		
-		// Open AI modal - calls AI directly and shows results
-		const modal = new CustomCommandAIModal(
-			this.app, 
-			command.title, 
-			processedContent,
-			selection,
-			this.settings,
-			editor
-		);
-		modal.open();
+		// Check if AI is configured
+		if (!this.settings.aiApiKey || !this.settings.aiApiKey.trim()) {
+			new Notice('❌ AI API Key not configured. Please set it in Settings → AI.');
+			return;
+		}
+
+		// Show loading notice
+		const loadingNotice = new Notice(`⏳ ${command.title}...`, 0);
+		
+		try {
+			// Import and create AI translator
+			const { AITranslator } = await import('./src/translator');
+			const translator = new AITranslator({
+				provider: this.settings.aiProvider,
+				apiKey: this.settings.aiApiKey,
+				model: this.settings.aiModel,
+				baseUrl: this.settings.aiBaseUrl
+			});
+
+			let aiResponse = '';
+
+			// Call AI with streaming - accumulate response
+			await translator.callAIStream(processedContent, (chunk) => {
+				aiResponse += chunk;
+			});
+			
+			// Trim final response
+			aiResponse = aiResponse.trim();
+			
+			// Hide loading notice
+			loadingNotice.hide();
+			
+			// Insert AI response at cursor position (replaces selection if any)
+			editor.replaceSelection(aiResponse);
+			
+			// Show success notice
+			new Notice(`✅ ${command.title} completed`);
+
+		} catch (error) {
+			console.error('AI generation error:', error);
+			loadingNotice.hide();
+			new Notice(`❌ Error: ${error.message}`);
+		}
 	}
 
 	injectStyles() {
