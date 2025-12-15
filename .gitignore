@@ -29,5 +29,14 @@ release.zip
 # Temporary documentation files
 *_FIX.md
 *_ENHANCED.md
+*_REPORT.md
+*_SUMMARY.md
+*_COMPLETE.md
+*_STATUS.md
+*_CHECK.md
 PUSH-TO-GITHUB.md
 FILE-STRUCTURE.md
+
+# Build scripts (not needed for users)
+build-release.ps1
+verify-build.ps1
