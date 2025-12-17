@@ -1,0 +1,10 @@
+{
+	"id": "ob-english-learner",
+	"name": "OB English Learner",
+	"version": "1.5",
+	"minAppVersion": "0.15.0",
+	"description": "YouTube language learning system with automatic transcript fetching, SRT generation, and Bases integration.",
+	"author": "obsidian学英语",
+	"authorUrl": "https://github.com/yourusername",
+	"isDesktopOnly": false
+}
