@@ -2107,7 +2107,7 @@ class LinguaSyncSettingTab extends PluginSettingTab {
 					const url = URL.createObjectURL(blob);
 					const a = document.createElement('a');
 					a.href = url;
-					a.download = `linguasync - settings - ${new Date().toISOString().slice(0, 10)}.json`;
+					a.download = `ob-english-learner-${new Date().toISOString().slice(0, 10)}.json`;
 					document.body.appendChild(a);
 					a.click();
 					document.body.removeChild(a);
