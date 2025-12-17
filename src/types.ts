@@ -48,6 +48,7 @@ export interface LinguaSyncSettings {
     aiApiKey: string;
     aiModel: string;
     aiBaseUrl: string;
+    aiPerformanceMode: 'balanced' | 'fast' | 'turbo';  // Performance optimization mode
     // Voice to Text
     enableVoice2Text: boolean;
     sttProvider: 'openai' | 'azure' | 'assemblyai' | 'custom';

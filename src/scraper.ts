@@ -40,12 +40,10 @@ export class YouTubeScraper {
     }
 
     /**
-     * Get transcript fetcher using yt-dlp command line tool
-     * This is the most reliable method for YouTube subtitle extraction
+     * Get transcript fetcher using yt-dlp directly
+     * ⚡ Optimized: Use yt-dlp directly for maximum reliability
      */
     private static getYTranscriptAPI(): YTranscriptAPI {
-        console.log('[LinguaSync] ✅ Using yt-dlp for transcript fetching');
-
         return {
             getTranscript: async (url: string, options?: { lang?: string }) => {
                 // ❌ IMPORTANT: yt-dlp should ONLY be used for YouTube!
@@ -54,24 +52,23 @@ export class YouTubeScraper {
                     throw new Error('yt-dlp should not be used for Bilibili. Please use BilibiliScraper.fetchVideoData() instead.');
                 }
 
-                // Extract video ID from URL
                 const videoId = this.extractVideoId(url);
                 if (!videoId) {
                     throw new Error('Invalid video URL');
                 }
 
-                // Check if yt-dlp is installed
+                // ⚡ 直接使用 yt-dlp（最可靠的方法）
                 const ytdlpInstalled = await YtDlpFetcher.isYtDlpInstalled();
                 if (!ytdlpInstalled) {
-                    throw new Error('yt-dlp 未安装。请先安装: pip install yt-dlp 或 winget install yt-dlp');
+                    throw new Error('yt-dlp is not installed. Please install: pip install yt-dlp or winget install yt-dlp');
                 }
 
-                console.log(`[LinguaSync] 🔄 Using yt-dlp to fetch subtitles for YouTube: ${videoId}`);
+                console.log(`[LinguaSync] 🔄 Using yt-dlp to fetch subtitles: ${videoId}`);
                 const result = await YtDlpFetcher.fetchTranscript(videoId, options?.lang || 'en');
                 console.log(`[LinguaSync] ✅ yt-dlp succeeded: ${result.lines.length} lines`);
 
                 return {
-                    lines: result.lines.map(item => ({
+                    lines: result.lines.map((item: any) => ({
                         offset: item.offset,
                         duration: item.duration,
                         text: item.text
@@ -194,12 +191,10 @@ export class YouTubeScraper {
             });
             const metadata = this.extractMetadata(response.text, videoId);
 
-            // Strategy: Try to get both English and Chinese transcripts
-            // Detect language by content, not by language code
-            console.log('[LinguaSync] Fetching transcripts...');
+            // ⚡ 优化策略：只获取英文字幕，中文翻译由 AI 后台处理
+            console.log('[LinguaSync] Fetching English transcript...');
 
             let enTranscript: TranscriptLine[] | null = null;
-            let zhTranscript: TranscriptLine[] | null = null;
 
             // Strategy 1: Try to get English transcript explicitly first
             const englishLangCodes = ['en', 'en-US', 'en-GB'];
@@ -250,14 +245,9 @@ export class YouTubeScraper {
                     console.log('[LinguaSync] First line preview:', firstLine.substring(0, 50));
 
                     if (hasChinese) {
-                        console.log(`[LinguaSync] ✅ Original transcript is Chinese`);
-                        zhTranscript = originalResponse.lines.map((line: any) => ({
-                            start: line.offset / 1000,
-                            duration: line.duration / 1000,
-                            text: this.cleanSubtitleText(line.text),
-                            lang: 'zh'
-                        }));
-                        zhTranscript = zhTranscript.filter(line => line.text.length > 0);
+                        // ⚠️ 视频只有中文字幕，跳过（本插件主要用于英语学习）
+                        console.log(`[LinguaSync] ⚠️ Original transcript is Chinese only`);
+                        console.log(`[LinguaSync] ⚠️ This video does not have English subtitles`);
                     } else {
                         console.log(`[LinguaSync] ✅ Original transcript is English`);
                         enTranscript = originalResponse.lines.map((line: any) => ({
@@ -273,60 +263,10 @@ export class YouTubeScraper {
                 }
             }
 
-            // Strategy 3: Try to get Chinese transcript/translation
-            if (!zhTranscript) {
-                // If we have English and AI translation is enabled, use AI
-                if (enTranscript && translatorConfig) {
-                    console.log('[LinguaSync] Using AI to translate English to Chinese...');
-                    console.log(`[LinguaSync] Provider: ${translatorConfig.provider}, Model: ${translatorConfig.model || 'default'}`);
-                    try {
-                        const translator = new AITranslator(translatorConfig);
-                        zhTranscript = await translator.translateTranscript(enTranscript);
-                        console.log(`[LinguaSync] ✅ AI translation completed: ${zhTranscript.length} lines`);
-                    } catch (error) {
-                        console.error('[LinguaSync] ❌ AI translation failed:', error);
-                        console.error('[LinguaSync] Error details:', error.message || error);
-
-                        // Show error to user
-                        new Notice(`AI Translation failed: ${error.message || 'Unknown error'}. Video will be imported without Chinese translation.`, 8000);
-
-                        // Continue without translation instead of failing completely
-                        console.log('[LinguaSync] Continuing without AI translation...');
-                    }
-                }
-
-                // If AI not available or failed, try YouTube's Chinese translation
-                if (!zhTranscript) {
-                    const chineseLangCodes = ['zh-Hans', 'zh-CN', 'zh', 'zh-TW'];
-
-                    for (const langCode of chineseLangCodes) {
-                        try {
-                            console.log(`[LinguaSync] Trying Chinese transcript: ${langCode}`);
-                            const YoutubeTranscript = this.getYTranscriptAPI();
-                            const response = await YoutubeTranscript.getTranscript(pageUrl, {
-                                lang: langCode
-                            });
-
-                            const firstLine = response.lines[0]?.text || '';
-                            const hasChinese = /[\u4e00-\u9fa5]/.test(firstLine);
-
-                            if (hasChinese) {
-                                console.log(`[LinguaSync] ✅ Found Chinese transcript`);
-                                zhTranscript = response.lines.map((line: any) => ({
-                                    start: line.offset / 1000,
-                                    duration: line.duration / 1000,
-                                    text: this.cleanSubtitleText(line.text),
-                                    lang: 'zh'
-                                }));
-                                zhTranscript = zhTranscript.filter(line => line.text.length > 0);
-                                break;
-                            }
-                        } catch (e) {
-                            console.log(`[LinguaSync] ${langCode} not available, trying next...`);
-                        }
-                    }
-                }
-            }
+            // ⚡ 优化：完全跳过中文字幕获取，只获取英文字幕
+            // 中文翻译由 AI 在后台处理（如果配置了 translatorConfig）
+            console.log('[LinguaSync] ✅ English transcript fetched, skipping Chinese subtitle fetch');
+            console.log('[LinguaSync] ℹ️ Chinese translation will be done by AI in background (if configured)');
 
             // Determine which to use as primary transcript
             // IMPORTANT: Always preserve original YouTube timestamps for perfect alignment
@@ -337,30 +277,14 @@ export class YouTubeScraper {
             // This ensures SRT files have perfect timestamp alignment with the video
             // AI segmentation can be done later in main.ts as an optional step
 
+            // ⚡ 简化逻辑：只使用英文字幕
             if (enTranscript) {
-                // Use original English transcript (no resegmentation)
-                console.log('[LinguaSync] ✅ Using original English transcript (preserves YouTube timestamps)');
-                console.log(`[LinguaSync] English: ${enTranscript.length} lines`);
+                console.log('[LinguaSync] ✅ Using English transcript (preserves YouTube timestamps)');
+                console.log(`[LinguaSync] Total lines: ${enTranscript.length}`);
                 transcript = enTranscript;
-
-                // Use original Chinese translation if available
-                if (zhTranscript) {
-                    console.log('[LinguaSync] ✅ Using original Chinese translation from YouTube');
-                    console.log(`[LinguaSync] Chinese: ${zhTranscript.length} lines`);
-                    translatedTranscript = zhTranscript;
-                } else {
-                    console.log('[LinguaSync] ℹ️ No Chinese translation available in YouTube captions');
-                    translatedTranscript = undefined;
-                }
-            } else if (zhTranscript) {
-                // Only Chinese available - use it but warn user
-                console.log('[LinguaSync] ⚠️ No English transcript found, using Chinese as fallback');
-                console.log('[LinguaSync] ⚠️ Note: Language Learner works best with English content');
-                console.log(`[LinguaSync] Chinese: ${zhTranscript.length} lines`);
-                transcript = zhTranscript;
-                translatedTranscript = undefined;
+                translatedTranscript = undefined;  // 中文翻译将在后台由 AI 处理
             } else {
-                throw new Error('No transcripts found for this video. The video may not have captions enabled.');
+                throw new Error('No English subtitles found for this video. The video may not have English captions enabled.');
             }
 
             // Add URL to metadata

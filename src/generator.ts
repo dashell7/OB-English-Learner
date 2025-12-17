@@ -129,7 +129,8 @@ export class NoteGenerator {
                     provider: this.settings.aiProvider,
                     apiKey: this.settings.aiApiKey,
                     model: this.settings.aiModel,
-                    baseUrl: this.settings.aiBaseUrl
+                    baseUrl: this.settings.aiBaseUrl,
+                    performanceMode: this.settings.aiPerformanceMode
                 };
                 const formatter = new AITranslator(translatorConfig);
                 formattedTranscriptText = await formatter.formatTranscript(

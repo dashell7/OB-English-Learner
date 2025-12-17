@@ -6,6 +6,7 @@ export interface TranslatorConfig {
     apiKey: string;
     model?: string;
     baseUrl?: string;
+    performanceMode?: 'balanced' | 'fast' | 'turbo';  // Performance optimization
 }
 
 export class AITranslator {
@@ -23,83 +24,149 @@ export class AITranslator {
     }
 
     /**
-     * 翻译整个字幕数组
+     * 翻译整个字幕数组（优化版：并行处理 + 动态延迟）
      * @param onProgress 进度回调 (currentBatch, totalBatches, percentage)
      */
     async translateTranscript(
         lines: TranscriptLine[],
         onProgress?: (current: number, total: number, percentage: number) => void
     ): Promise<TranscriptLine[]> {
-        console.log('[LinguaSync] Starting AI translation...');
+        console.log('[LinguaSync] Starting AI translation (optimized parallel mode)...');
         console.log(`[LinguaSync] Provider: ${this.config.provider}, Lines: ${lines.length}`);
 
-        // 根据不同提供商优化批次大小和延迟
-        let batchSize = 25;
-        let delayMs = 2000;
+        // ⚡ 性能模式配置
+        const perfMode = this.config.performanceMode || 'fast';
+        console.log(`[LinguaSync] Performance mode: ${perfMode}`);
 
-        // 针对不同 API 提供商的优化策略
+        // 基础配置（根据性能模式）
+        let batchSize = 50;
+        let delayMs = 800;
+        let parallelBatches = 3;
+
+        // 性能模式调整系数
+        const perfMultipliers = {
+            'balanced': { batch: 0.8, delay: 1.5, parallel: 0.67 },  // 保守：小批次，长延迟，少并发
+            'fast': { batch: 1.0, delay: 1.0, parallel: 1.0 },       // 快速：优化平衡（默认）
+            'turbo': { batch: 1.3, delay: 0.6, parallel: 1.33 }      // 极速：大批次，短延迟，多并发
+        };
+
+        const multiplier = perfMultipliers[perfMode];
+
+        // 针对不同 API 提供商的基础配置
         switch (this.config.provider) {
             case 'deepseek':
-                batchSize = 30; // DeepSeek 速度快，可以更大批次
-                delayMs = 1500; // 更短延迟
+                batchSize = Math.round(60 * multiplier.batch);
+                delayMs = Math.round(600 * multiplier.delay);
+                parallelBatches = Math.max(2, Math.round(4 * multiplier.parallel));
                 break;
             case 'siliconflow':
-                batchSize = 25; // 平衡设置
-                delayMs = 2000;
+                batchSize = Math.round(50 * multiplier.batch);
+                delayMs = Math.round(800 * multiplier.delay);
+                parallelBatches = Math.max(2, Math.round(3 * multiplier.parallel));
                 break;
             case 'gemini':
-                batchSize = 20; // Gemini 免费版限流严格
-                delayMs = 2500;
+                batchSize = Math.round(30 * multiplier.batch);  // Gemini 限流严格
+                delayMs = Math.round(1000 * multiplier.delay);
+                parallelBatches = Math.max(1, Math.round(2 * multiplier.parallel));
                 break;
             case 'openai':
-                batchSize = 20; // OpenAI 按 token 计费，适中设置
-                delayMs = 2000;
+                batchSize = Math.round(40 * multiplier.batch);
+                delayMs = Math.round(800 * multiplier.delay);
+                parallelBatches = Math.max(2, Math.round(3 * multiplier.parallel));
                 break;
             default:
-                batchSize = 25;
-                delayMs = 2000;
+                batchSize = Math.round(50 * multiplier.batch);
+                delayMs = Math.round(800 * multiplier.delay);
+                parallelBatches = Math.max(2, Math.round(3 * multiplier.parallel));
         }
 
-        console.log(`[LinguaSync] Batch config: ${batchSize} lines/batch, ${delayMs}ms delay`);
+        console.log(`[LinguaSync] ⚡ Optimized config: ${batchSize} lines/batch, ${delayMs}ms delay, ${parallelBatches} parallel`);
 
-        const translatedLines: TranscriptLine[] = [];
+        const translatedLines: TranscriptLine[] = new Array(lines.length);
         const totalBatches = Math.ceil(lines.length / batchSize);
         const startTime = Date.now();
+        let completedBatches = 0;
 
+        // 创建所有批次任务
+        const batchPromises: Promise<void>[] = [];
+        
         for (let i = 0; i < lines.length; i += batchSize) {
-            const batch = lines.slice(i, i + batchSize);
-            const batchNum = Math.floor(i / batchSize) + 1;
+            const batchIndex = Math.floor(i / batchSize);
+            const batch = lines.slice(i, Math.min(i + batchSize, lines.length));
+            const startIndex = i;
 
-            console.log(`[LinguaSync] Translating batch ${batchNum}/${totalBatches} (${batch.length} lines)...`);
+            // 创建批次处理任务
+            const batchPromise = (async () => {
+                // 计算延迟：根据批次索引交错执行，避免同时请求
+                const staggerDelay = (batchIndex % parallelBatches) * (delayMs / parallelBatches);
+                if (staggerDelay > 0) {
+                    await this.sleep(staggerDelay);
+                }
 
-            const batchStart = Date.now();
-            const translatedBatch = await this.translateBatch(batch);
-            translatedLines.push(...translatedBatch);
-            const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
+                const batchNum = batchIndex + 1;
+                console.log(`[LinguaSync] 🔄 Batch ${batchNum}/${totalBatches} started (${batch.length} lines)...`);
 
-            // 显示进度和预计剩余时间
-            const batchProgress = (batchNum / totalBatches) * 100;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const estimatedTotal = (elapsed / batchNum) * totalBatches;
-            const remaining = Math.max(0, estimatedTotal - elapsed);
+                const batchStart = Date.now();
+                try {
+                    const translatedBatch = await this.translateBatch(batch);
+                    
+                    // 将翻译结果放到正确的位置
+                    for (let j = 0; j < translatedBatch.length; j++) {
+                        translatedLines[startIndex + j] = translatedBatch[j];
+                    }
 
-            console.log(`[LinguaSync] ✓ Batch ${batchNum} completed in ${batchTime}s | Progress: ${batchProgress.toFixed(0)}% | ETA: ${remaining.toFixed(0)}s`);
+                    const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
+                    completedBatches++;
 
-            // 调用进度回调
-            if (onProgress) {
-                onProgress(batchNum, totalBatches, batchProgress);
+                    // 显示进度和预计剩余时间
+                    const batchProgress = (completedBatches / totalBatches) * 100;
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const estimatedTotal = (elapsed / completedBatches) * totalBatches;
+                    const remaining = Math.max(0, estimatedTotal - elapsed);
+
+                    console.log(`[LinguaSync] ✓ Batch ${batchNum} done in ${batchTime}s | ${completedBatches}/${totalBatches} (${batchProgress.toFixed(0)}%) | ETA: ${remaining.toFixed(0)}s`);
+
+                    // 调用进度回调
+                    if (onProgress) {
+                        onProgress(completedBatches, totalBatches, batchProgress);
+                    }
+
+                    // 批次间的基础延迟（已大幅减少）
+                    if (completedBatches < totalBatches) {
+                        await this.sleep(delayMs);
+                    }
+                } catch (error) {
+                    console.error(`[LinguaSync] ❌ Batch ${batchNum} failed:`, error);
+                    // 失败的批次填充错误标记
+                    for (let j = 0; j < batch.length; j++) {
+                        translatedLines[startIndex + j] = {
+                            ...batch[j],
+                            text: `[Translation failed] ${batch[j].text}`,
+                            lang: 'zh'
+                        };
+                    }
+                    completedBatches++;
+                }
+            })();
+
+            batchPromises.push(batchPromise);
+
+            // 控制并发数：每accumulate parallelBatches个任务后等待一组完成
+            if (batchPromises.length >= parallelBatches) {
+                await Promise.all(batchPromises.splice(0, parallelBatches));
             }
+        }
 
-            // 避免API限流，使用优化后的延迟
-            if (i + batchSize < lines.length) {
-                console.log(`[LinguaSync] Waiting ${delayMs / 1000}s before next batch...`);
-                await this.sleep(delayMs);
-            }
+        // 等待剩余任务完成
+        if (batchPromises.length > 0) {
+            await Promise.all(batchPromises);
         }
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[LinguaSync] ✅ Translation completed! Total time: ${totalTime}s (${lines.length} lines)`);
-        return translatedLines;
+        const speedup = ((lines.length * 2) / parseFloat(totalTime)).toFixed(1); // 预估加速比
+        console.log(`[LinguaSync] ✅ Translation completed! Total: ${totalTime}s (${lines.length} lines, ~${speedup} lines/s)`);
+        
+        return translatedLines.filter(line => line); // 过滤undefined
     }
 
     /**
@@ -639,18 +706,18 @@ Output:`;
     }
 
     /**
-     * 智能格式化转录文本：添加标点符号和分段
+     * 智能格式化转录文本：添加标点符号和分段（优化版：并行处理）
      * @param lines 转录行
      * @param customPrompt 自定义 prompt 模板（可选），使用 {{text}} 作为文本占位符
      */
     async formatTranscript(lines: TranscriptLine[], customPrompt?: string): Promise<string> {
-        console.log('[LinguaSync] Starting AI text formatting (punctuation & paragraphs)...');
+        console.log('[LinguaSync] Starting AI text formatting (optimized parallel mode)...');
 
         // 将所有行合并成一个长文本，并清理标记
         const rawText = lines.map(line => this.cleanText(line.text)).filter(t => t.length > 0).join(' ');
 
-        // 分批处理，每批大约2000字符
-        const maxChunkSize = 2000;
+        // ⚡ 优化：更大块 + 更少延迟
+        const maxChunkSize = 3000;  // 增大块大小（原2000）
         const chunks: string[] = [];
 
         let currentChunk = '';
@@ -668,23 +735,54 @@ Output:`;
             chunks.push(currentChunk.trim());
         }
 
-        console.log(`[LinguaSync] Formatting ${chunks.length} text chunks...`);
+        console.log(`[LinguaSync] ⚡ Formatting ${chunks.length} chunks (parallel mode, 3000 chars/chunk)...`);
 
-        const formattedChunks: string[] = [];
-        for (let i = 0; i < chunks.length; i++) {
-            console.log(`[LinguaSync] Formatting chunk ${i + 1}/${chunks.length}...`);
-            const formatted = await this.formatTextChunk(chunks[i], customPrompt);
-            formattedChunks.push(formatted);
+        // ⚡ 性能模式配置
+        const perfMode = this.config.performanceMode || 'fast';
+        
+        // 基础配置
+        let parallelChunks = this.config.provider === 'deepseek' ? 3 : 2;
+        let delayMs = this.config.provider === 'deepseek' ? 1200 : 1500;
 
-            // 避免API限流 - 增加延迟到3.5秒
-            if (i < chunks.length - 1) {
-                console.log('[LinguaSync] Waiting 3.5s before next chunk to avoid rate limit...');
-                await this.sleep(3500);
+        // 根据性能模式调整
+        if (perfMode === 'turbo') {
+            parallelChunks = Math.round(parallelChunks * 1.5);  // 增加 50% 并发
+            delayMs = Math.round(delayMs * 0.6);  // 减少 40% 延迟
+        } else if (perfMode === 'balanced') {
+            parallelChunks = Math.max(1, Math.round(parallelChunks * 0.67));  // 减少并发
+            delayMs = Math.round(delayMs * 1.5);  // 增加延迟
+        }
+        
+        console.log(`[LinguaSync] Performance: ${perfMode} | Parallel: ${parallelChunks} | Delay: ${delayMs}ms`)
+
+        const formattedChunks: string[] = new Array(chunks.length);
+        const startTime = Date.now();
+
+        // 分组并行处理
+        for (let i = 0; i < chunks.length; i += parallelChunks) {
+            const batchChunks = chunks.slice(i, Math.min(i + parallelChunks, chunks.length));
+            const batchPromises = batchChunks.map(async (chunk, index) => {
+                const chunkIndex = i + index;
+                console.log(`[LinguaSync] 🔄 Formatting chunk ${chunkIndex + 1}/${chunks.length}...`);
+                const formatted = await this.formatTextChunk(chunk, customPrompt);
+                formattedChunks[chunkIndex] = formatted;
+                console.log(`[LinguaSync] ✓ Chunk ${chunkIndex + 1} done`);
+                return formatted;
+            });
+
+            // 等待当前批次完成
+            await Promise.all(batchPromises);
+
+            // 批次间延迟（已大幅减少）
+            if (i + parallelChunks < chunks.length) {
+                console.log(`[LinguaSync] Waiting ${delayMs / 1000}s before next batch...`);
+                await this.sleep(delayMs);
             }
         }
 
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
         const result = formattedChunks.join('\n\n');
-        console.log('[LinguaSync] ✅ Text formatting completed!');
+        console.log(`[LinguaSync] ✅ Formatting completed in ${totalTime}s (${chunks.length} chunks)!`);
         return result;
     }
 
